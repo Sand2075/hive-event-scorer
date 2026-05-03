@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hive Event Scorer - Main</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/global.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/teams.css">
+    <link rel="stylesheet" href="css/stats.css">
+    <link rel="stylesheet" href="css/settings.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="title-section">
+                    <h1 class="minecraft-title">HIVE EVENT SCORER</h1>
+                    <p class="subtitle">Track player scores from chat text across all Hive gamemodes</p>
+                    <p class="disclaimer">⚠️ Non-Profit Project - Not affiliated with The Hive</p>
+                </div>
+                <div class="action-buttons">
+                    <button id="saveBtn" class="btn btn-success btn-action">Save JSON</button>
+                    <button id="loadBtn" class="btn btn-primary btn-action">Load JSON</button>
+                    <input type="file" id="fileInput" accept=".json" class="hidden-input" aria-label="Upload JSON file">
+                </div>
+            </div>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="#" class="nav-tab active" data-tab="scorer">Scorer</a></li>
+                <li><a href="#" class="nav-tab" data-tab="teams">Teams</a></li>
+                <li><a href="#" class="nav-tab" data-tab="stats">Statistics</a></li>
+                <li><a href="#" class="nav-tab" data-tab="settings">Settings</a></li>
+            </ul>
+        </nav>
+
+        <div id="scorer" class="tab-content active">
+            <div class="main-content">
+                <!-- Quick Stats -->
+                <div class="quick-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalTeams">0</div>
+                        <div class="stat-label">Teams</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalPlayers">0</div>
+                        <div class="stat-label">Players Logged</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="teamPlacements">-</div>
+                        <div class="stat-label">Team Placements</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="currentGamemode">None</div>
+                        <div class="stat-label">Current Mode</div>
+                    </div>
+                </div>
+
+                <!-- Gamemode Selection -->
+                <div class="section gamemode-section">
+                    <span class="gamemode-icon">Game</span>
+                    <div>
+                        <label for="gamemode">Select Gamemode:</label>
+                        <select id="gamemode">
+                            <option value="">-- Choose a Gamemode --</option>
+                            <option value="BedWars">BedWars</option>
+                            <option value="Treasure Wars">Treasure Wars</option>
+                            <option value="SkyWars">SkyWars</option>
+                            <option value="Murder Mystery">Murder Mystery</option>
+                            <option value="DeathRun">DeathRun</option>
+                            <option value="The Bridge">The Bridge</option>
+                            <option value="Ground Wars">Ground Wars</option>
+                            <option value="Hide and Seek">Hide and Seek</option>
+                            <option value="Survival Games">Survival Games</option>
+                            <option value="BlockDrop">BlockDrop</option>
+                            <option value="Build Battle">Build Battle</option>
+                            <option value="Block Party">Block Party</option>
+                            <option value="Gravity">Gravity</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="section chat-input-section">
+                    <div class="section-header">
+                        <h2>Chat Text Input</h2>
+                        <div class="action-buttons">
+                            <button id="clearInput" class="btn btn-secondary">Clear Input</button>
+                        </div>
+                    </div>
+
+                    <textarea id="chatInput"
+                        placeholder="Paste chat text here...&#10;&#10;Example:&#10;Player1 killed Player2&#10;Player3 scored a goal&#10;Player1 won the game&#10;&#10;Tip: You can paste multiple lines at once!"></textarea>
+
+                    <div class="input-actions">
+                        <button id="processBtn" class="btn btn-primary">Process Chat</button>
+                        <button id="processSingleLine" class="btn btn-secondary">Process Last Line</button>
+                    </div>
+                </div>
+
+                <!-- Scoreboard -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Scoreboard</h2>
+                        <div class="action-buttons">
+                            <button id="undoBtn" class="btn btn-secondary" disabled>Undo</button>
+                            <button id="redoBtn" class="btn btn-secondary" disabled>Redo</button>
+                            <button id="resetScores" class="btn btn-warning">Reset Scores</button>
+                            <button id="viewStats" class="btn btn-info">View Details</button>
+                        </div>
+                    </div>
+                    <div id="scoreboard" class="scoreboard">
+                        <p class="empty-state">No scores yet. Select a gamemode and process some chat text to begin!</p>
+                    </div>
+                </div>
+
+                <!-- Activity Log -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Activity Log</h2>
+                        <button id="clearLog" class="btn btn-secondary">Clear Log</button>
+                    </div>
+                    <div id="activityLog" class="activity-log">
+                        <p class="empty-state">Activity will appear here...</p>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- Teams Tab -->
+    <div id="teams" class="tab-content">
+        <div class="teams-container">
+            <!-- Add Player to Team -->
+            <div class="section">
+                <h2 class="section-title">Add Players to Teams</h2>
+                <div class="team-creator">
+                    <div>
+                        <label for="playerName">Player Name:</label>
+                        <input type="text" id="playerName" placeholder="Enter player username...">
+                    </div>
+                    <div>
+                        <label for="teamSelect">Select Team:</label>
+                        <select id="teamSelect" class="team-select">
+                            <option value="">Choose team...</option>
+                            <option value="YELLOW">Yellow</option>
+                            <option value="LIME">Lime</option>
+                            <option value="RED">Red</option>
+                            <option value="BLUE">Blue</option>
+                            <option value="GOLD">Gold</option>
+                            <option value="MAGENTA">Magenta</option>
+                            <option value="AQUA">Aqua</option>
+                            <option value="GRAY">Gray</option>
+                            <option value="PURPLE">Purple</option>
+                            <option value="GREEN">Green</option>
+                            <option value="DARK GRAY">Dark Gray</option>
+                            <option value="CYAN">Cyan</option>
+                        </select>
+                    </div>
+                    <div class="create-team-button">
+                        <button id="addPlayer" class="btn btn-primary">Add Player</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teams Display -->
+            <div class="section">
+                <div class="section-header">
+                    <h2>Teams</h2>
+                    <div class="team-actions-bar">
+                        <div class="btn-group">
+                            <button id="clearAllPlayers" class="btn btn-warning">Clear All Players</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="teamsGrid" class="teams-grid">
+                    <div class="teams-empty-state">
+                        <h3>No players assigned yet</h3>
+                        <p>Add players to teams using the form above!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Tab -->
+    <div id="stats" class="tab-content">
+        <div class="stats-container">
+            <div class="section">
+                <h2 class="section-title">Current Game - Player Performance</h2>
+                <p class="help-text">Individual player statistics tracked during the current game</p>
+                <div id="playerStats" class="player-stats">
+                    <p class="empty-state">No player data available!</p>
+                </div>
+            </div>
+
+            <div class="section section-spacing">
+                <h2 class="section-title">Game History</h2>
+                <p class="help-text">All completed games with scores and player performance</p>
+                <div id="gameHistory">
+                    <p class="empty-state">No completed games yet!</p>
+                </div>
+            </div>
+
+            <div class="section section-spacing">
+                <h2 class="section-title">Overall Statistics</h2>
+                <p class="help-text">Combined totals across all games played</p>
+                <div id="overallStats">
+                    <p class="empty-state">No games played yet!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings" class="tab-content">
+        <div class="settings-container">
+            <div class="section">
+                <h2 class="section-title">Gamemode Settings</h2>
+                <p class="help-text">Configure point values and detection patterns for each gamemode.</p>
+
+                <div class="gamemode-selector">
+                    <div class="gamemode-dropdown-container">
+                        <label for="settingsGamemode">Select Gamemode to Configure:</label>
+                        <select id="settingsGamemode" class="gamemode-select">
+                            <option value="DeathRun">DeathRun</option>
+                            <option value="SkyWars">SkyWars</option>
+                            <option value="BlockDrop">Block Drop</option>
+                            <option value="BedWars">BedWars</option>
+                            <option value="Block Party">Block Party</option>
+                            <option value="Gravity">Gravity</option>
+                            <option value="Survival Games">Survival Games</option>
+                        </select>
+                        <span class="selector-hint">👆 Click here to choose which gamemode to edit</span>
+                    </div>
+                    <div class="gamemode-actions">
+                        <button id="addNewGamemode" class="btn btn-primary">+ New Gamemode</button>
+                        <button id="deleteGamemode" class="btn btn-danger">Delete Gamemode</button>
+                    </div>
+                </div>
+
+                <div id="pointsSettings" class="points-settings">
+                    <!-- Points settings will be dynamically populated -->
+                </div>
+
+                <div class="detection-patterns-section">
+                    <h3>Detection Patterns</h3>
+                    <p class="help-text">Configure what chat messages trigger scoring events. Use § for Minecraft color
+                        codes.</p>
+
+                    <div class="pattern-group">
+                        <label>Team Elimination Pattern:</label>
+                        <input type="text" id="patternTeamElim" class="pattern-input"
+                            placeholder="§c§l» [PLAYER] has been ELIMINATED">
+                        <span class="pattern-help">Detects when a team is eliminated</span>
+                    </div>
+
+                    <div class="pattern-group">
+                        <label>Winner Pattern:</label>
+                        <input type="text" id="patternWinner" class="pattern-input"
+                            placeholder="§c§l» [PLAYER] is the WINNER">
+                        <span class="pattern-help">Detects the winning team</span>
+                    </div>
+
+                    <div class="pattern-group" id="patternKillGroup">
+                        <label>Kill Prefix:</label>
+                        <input type="text" id="patternKillPrefix" class="pattern-input" placeholder="§c§l»">
+                        <span class="pattern-help">Prefix that appears before kill messages</span>
+                    </div>
+
+                    <div class="pattern-group" id="patternBedBreakGroup">
+                        <label>Bed Break Pattern:</label>
+                        <input type="text" id="patternBedBreak" class="pattern-input"
+                            placeholder="[PLAYER] destroyed [PLAYER]'s bed">
+                        <span class="pattern-help">Detects bed break events</span>
+                    </div>
+
+                    <div class="pattern-group" id="patternIndividualFinishGroup">
+                        <label>Individual Finish Pattern:</label>
+                        <input type="text" id="patternIndividualFinish" class="pattern-input"
+                            placeholder="[PLAYER] finished in (\d+)(?:st|nd|rd|th) place">
+                        <span class="pattern-help">Detects when a player finishes individually</span>
+                    </div>
+                </div>
+
+                <div class="settings-actions">
+                    <button id="saveSettings" class="btn btn-success">Save Settings</button>
+                    <button id="resetSettings" class="btn btn-warning">Reset to Defaults</button>
+                    <button id="exportSettings" class="btn btn-info">Export Settings</button>
+                    <button id="importSettings" class="btn btn-info">Import Settings</button>
+                    <input type="file" id="settingsFileInput" accept=".json" class="hidden-input"
+                        aria-label="Upload settings file">
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <footer class="app-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <p class="footer-text">Created by <strong>PrimeStrat</strong></p>
+                <p class="footer-text">© 2026 Prime Software Development. All rights reserved.</p>
+            </div>
+            <div class="footer-section">
+                <p class="footer-disclaimer">Not affiliated with or endorsed by The Hive.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+
+</html>
