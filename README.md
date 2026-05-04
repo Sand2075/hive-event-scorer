@@ -4,7 +4,8 @@ This is an advanced chat interpreter that allows Hive Events to automatically ca
 
 ### Features
 - Team management and scoring
-- Real-time event statistics
+- Automatically calculate event stats
+- Score editor
 - Customizable settings
 - Clean and intuitive interface
 
