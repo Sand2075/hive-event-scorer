@@ -1698,7 +1698,7 @@ class HiveEventScorer {
 
     updateStats() {
         const teamCount = Object.keys(this.teams).length;
-        const uniquePlayers = Object.keys(this.playerStats).length;
+        const uniquePlayers = this.getLoggedPlayerCount();
 
         // Generate team placements summary
         let placementsSummary = '-';
@@ -1716,6 +1716,19 @@ class HiveEventScorer {
         this.animateNumber('totalPlayers', uniquePlayers);
         document.getElementById('teamPlacements').textContent = placementsSummary;
         document.getElementById('currentGamemode').textContent = this.gamemode || 'None';
+    }
+
+    getLoggedPlayerCount() {
+        const loggedPlayers = new Set();
+
+        Object.values(this.teams).forEach(team => {
+            if (!team.players) return;
+            team.players.forEach(player => loggedPlayers.add(player));
+        });
+
+        Object.keys(this.playerStats).forEach(player => loggedPlayers.add(player));
+
+        return loggedPlayers.size;
     }
 
     updateScoreboard() {
