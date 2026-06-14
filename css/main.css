@@ -62,8 +62,8 @@
     display: grid;
     grid-template-columns: 50px 1fr auto;
     align-items: center;
-    gap: 20px;
-    padding: 18px 25px;
+    gap: 28px;
+    padding: 18px 28px;
     background: linear-gradient(90deg, var(--hive-gray) 0%, var(--hive-card) 100%);
     border-left: 4px solid var(--hive-yellow);
     margin-bottom: 12px;
@@ -294,5 +294,124 @@
 
     .input-actions {
         flex-direction: column;
+    }
+}
+
+.game-history-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(12, 14, 22, 0.72);
+    backdrop-filter: blur(8px);
+    z-index: 1200;
+}
+
+.game-history-modal.open {
+    display: flex;
+}
+
+.game-history-modal-dialog {
+    width: min(1100px, 100%);
+    max-height: min(84vh, 900px);
+    overflow: auto;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(20, 26, 38, 0.98), rgba(11, 15, 24, 0.98));
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+}
+
+.game-history-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.game-history-modal-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.game-history-modal-close {
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.game-history-modal-body {
+    padding: 22px;
+}
+
+.modal-section {
+    display: grid;
+    gap: 18px;
+}
+
+.modal-hint {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.modal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 0.95rem;
+}
+
+.modal-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.modal-score-list,
+.modal-player-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.modal-score-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.modal-score-input {
+    width: 100px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.game-actions-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+    .modal-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .game-history-modal {
+        padding: 12px;
     }
 }

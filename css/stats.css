@@ -8,6 +8,10 @@
     padding: 0 20px;
 }
 
+.stats-container .section:hover {
+    transform: none;
+}
+
 /* Section Titles */
 .section-title {
     color: var(--hive-yellow);
@@ -16,6 +20,22 @@
 
 .section-spacing {
     margin-top: 40px;
+}
+
+.player-performance-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.player-performance-toolbar label {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.player-performance-toolbar select {
+    min-width: 220px;
 }
 
 /* Game History */
@@ -34,7 +54,7 @@
 
 .game-history-item:hover {
     border-color: var(--hive-purple);
-    transform: translateX(2px);
+    transform: none;
 }
 
 .game-header {
@@ -90,7 +110,7 @@
 
 .player-stat-card:hover {
     border-color: var(--hive-yellow);
-    transform: translateY(-2px);
+    transform: none;
 }
 
 .stat-badge {
@@ -343,7 +363,7 @@
 
 .game-entry:hover {
     background: var(--hover-bg);
-    transform: translateX(2px);
+    transform: none;
 }
 
 .game-header {
@@ -430,7 +450,7 @@
 
 .game-history-card:hover {
     border-color: var(--hive-yellow);
-    transform: translateX(5px);
+    transform: none;
 }
 
 .game-date {
@@ -460,8 +480,8 @@
 }
 
 .game-details summary:hover {
-    background: var(--hive-yellow);
-    color: var(--bg-primary);
+    background: rgba(255, 215, 0, 0.16);
+    color: var(--hive-yellow);
 }
 
 .game-details[open] summary {
@@ -676,7 +696,7 @@
 }
 
 .summary-card:hover {
-    transform: translateY(-2px);
+    transform: none;
     border-color: var(--hive-yellow);
 }
 
@@ -886,8 +906,8 @@
 
 .player-leaderboard-card:hover {
     border-color: var(--hive-yellow);
-    transform: translateX(5px);
-    box-shadow: 0 4px 15px rgba(157, 78, 221, 0.2);
+    transform: none;
+    box-shadow: 0 4px 12px rgba(157, 78, 221, 0.14);
 }
 
 .leaderboard-rank {
@@ -935,7 +955,7 @@
 }
 
 .gamemode-score:hover {
-    background: var(--hive-gray);
+    background: rgba(157, 78, 221, 0.12);
     color: var(--hive-yellow);
 }
 

@@ -113,7 +113,6 @@
                             <button id="undoBtn" class="btn btn-secondary" disabled>Undo</button>
                             <button id="redoBtn" class="btn btn-secondary" disabled>Redo</button>
                             <button id="resetScores" class="btn btn-warning">Reset Scores</button>
-                            <button id="viewStats" class="btn btn-info">View Details</button>
                         </div>
                     </div>
                     <div id="scoreboard" class="scoreboard">
@@ -208,6 +207,18 @@
             <div class="section">
                 <h2 class="section-title">Current Game - Player Performance</h2>
                 <p class="help-text">Individual player statistics tracked during the current game</p>
+                <div class="player-performance-toolbar">
+                    <label for="playerStatsSort">Sort by:</label>
+                    <select id="playerStatsSort">
+                        <option value="points">Most Points</option>
+                        <option value="kills">Most Kills</option>
+                        <option value="finalKills">Most Final Kills</option>
+                        <option value="bedBreaks">Most Bed Breaks</option>
+                        <option value="placement">Best Placement</option>
+                        <option value="deathsLow">Fewest Deaths</option>
+                        <option value="deathsHigh">Most Deaths</option>
+                    </select>
+                </div>
                 <div id="playerStats" class="player-stats">
                     <p class="empty-state">No player data available!</p>
                 </div>
@@ -228,13 +239,18 @@
                     <p class="empty-state">No completed games yet!</p>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <div class="section section-spacing">
-                <h2 class="section-title">Overall Statistics</h2>
-                <p class="help-text">Combined totals across all games played</p>
-                <div id="overallStats">
-                    <p class="empty-state">No games played yet!</p>
-                </div>
+    <div id="gameHistoryModal" class="game-history-modal" aria-hidden="true">
+        <div class="game-history-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="gameHistoryModalTitle">
+            <div class="game-history-modal-header">
+                <h2 id="gameHistoryModalTitle">Game History</h2>
+                <button type="button" class="game-history-modal-close" data-action="close-game-history-modal"
+                    aria-label="Close dialog">×</button>
+            </div>
+            <div id="gameHistoryModalBody" class="game-history-modal-body">
+                <p class="empty-state">Select a completed game to view its details.</p>
             </div>
         </div>
     </div>

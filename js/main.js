@@ -17,6 +17,9 @@ class HiveEventScorer {
         this.hasUnsavedChanges = false;
         this.editingGameId = null; // Track which saved game is being edited
         this.undoStack = []; // Stack for undo operations
+        this.redoStack = []; // Stack for redo operations
+        this.playerStatsSort = 'points';
+        this.currentGameCompleted = false;
 
         // Predefined teams with color codes
         this.predefinedTeams = {
@@ -105,10 +108,13 @@ class HiveEventScorer {
 
     async init() {
         this.loadTeams();
+        this.loadPersistentData();
         this.loadSettings();
         this.loadEmergencySave(); // Try to recover from crash
         this.updateGamemodeDropdowns(); // Populate gamemode dropdowns
         this.setupEventListeners();
+        this.applySavedGamemodeSelection();
+        this.syncGamemodeFromSelection();
         this.updateUI();
 
         // Prompt user before closing if they have unsaved data
@@ -196,6 +202,10 @@ class HiveEventScorer {
             this.performUndo();
         });
 
+        document.getElementById('redoBtn').addEventListener('click', () => {
+            this.performRedo();
+        });
+
         // Game history editing (for manual point adjustments)
         const gameHistory = document.getElementById('gameHistory');
         if (gameHistory) {
@@ -206,6 +216,15 @@ class HiveEventScorer {
 
         // Team management
         this.setupTeamManagement();
+
+        const playerStatsSort = document.getElementById('playerStatsSort');
+        if (playerStatsSort) {
+            playerStatsSort.value = this.playerStatsSort;
+            playerStatsSort.addEventListener('change', (e) => {
+                this.playerStatsSort = e.target.value;
+                this.renderPlayerStats();
+            });
+        }
 
         // Settings management
         this.setupSettingsManagement();
@@ -352,6 +371,8 @@ class HiveEventScorer {
             return;
         }
 
+        this.pushUndoState('saveGameToHistory');
+
         // Mark end time
         this.currentGame.endTime = new Date().toISOString();
 
@@ -367,7 +388,14 @@ class HiveEventScorer {
             playerEliminationOrder: [...this.playerEliminationOrder]
         };
 
-        this.gameHistory.push(gameRecord);
+        const existingIndex = this.gameHistory.findIndex(game => String(game.id) === String(gameRecord.id));
+        if (existingIndex !== -1) {
+            this.gameHistory[existingIndex] = gameRecord;
+        } else {
+            this.gameHistory.push(gameRecord);
+        }
+
+        this.currentGameCompleted = false;
         this.syncPersistentData();
         this.addLog(`Game saved to history: ${this.currentGame.gamemode}`, 'info');
     }
@@ -376,8 +404,17 @@ class HiveEventScorer {
         // Save game history and current game state to localStorage
         localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
         localStorage.setItem('hive_event_data', JSON.stringify({
+            currentGame: this.currentGame,
+            gameHistory: this.gameHistory,
             scores: this.scores,
-            playerStats: this.playerStats
+            playerStats: this.playerStats,
+            eliminationOrder: this.eliminationOrder,
+            playerEliminationOrder: this.playerEliminationOrder,
+            playersFinished: this.playersFinished,
+            teamsFullyFinished: this.teamsFullyFinished,
+            undoStack: this.undoStack,
+            redoStack: this.redoStack,
+            gamemode: this.gamemode
         }));
     }
 
@@ -396,6 +433,8 @@ class HiveEventScorer {
             }
         }
 
+        this.pushUndoState('startNewGame');
+
         this.currentGame = {
             id: Date.now(),
             gamemode: this.gamemode,
@@ -409,6 +448,7 @@ class HiveEventScorer {
         this.playerEliminationOrder = [];
         this.playersFinished = {};
         this.teamsFullyFinished = [];
+        this.currentGameCompleted = false;
 
         // Initialize scores for all teams
         Object.keys(this.teams).forEach(teamName => {
@@ -451,6 +491,12 @@ class HiveEventScorer {
         document.getElementById('chatInput').value = '';
 
         this.addLog(`Processed ${processedCount} events from ${lines.length} lines`);
+
+        if (this.currentGameCompleted && this.currentGame && Object.keys(this.scores).length > 0) {
+            this.saveGameToHistory();
+        }
+
+        this.syncPersistentData();
         this.updateUI();
         this.hasUnsavedChanges = true;
     }
@@ -459,6 +505,16 @@ class HiveEventScorer {
         // Check if line has the kill/elimination prefix
         const cleanLine = this.stripColorCodes(line);
         const hasPrefix = cleanLine.startsWith('»');
+
+        if (/»\s*.*game over!?/i.test(cleanLine)) {
+            this.currentGameCompleted = true;
+        }
+
+        if (this.isBlockDropMode()) {
+            if (this.detectBlockDropEvent(cleanLine)) {
+                return true;
+            }
+        }
 
         if (this.gamemode === 'BedWars') {
             if (this.detectBedWarsEvent(cleanLine)) {
@@ -536,7 +592,49 @@ class HiveEventScorer {
         return false;
     }
 
+    detectBlockDropEvent(line) {
+        const lowerLine = line.toLowerCase();
+
+        if (/game over!?/i.test(line) || /last player standing wins/i.test(line)) {
+            this.calculatePlayerPlacements();
+            this.addLog('Block Drop game over', 'info');
+            return true;
+        }
+
+        const eliminationKeywords = [
+            'fell off the map',
+            'fell off!',
+            'fell off',
+            'fell to their demise',
+            'forgot their parachute',
+            'said goodbye to this cruel world',
+            "got ratio'd",
+            'you died!'
+        ];
+
+        if (!eliminationKeywords.some(keyword => lowerLine.includes(keyword))) {
+            return false;
+        }
+
+        for (const teamName in this.teams) {
+            const team = this.teams[teamName];
+            if (!team.players) continue;
+
+            for (const playerName of team.players) {
+                if (!lowerLine.includes(playerName.toLowerCase())) continue;
+
+                this.markPlayerEliminated(playerName, teamName);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     detectTeamElimination(line, hasPrefix) {
+        if (this.isBlockDropMode()) return false;
+
         // More consistent detection: require prefix for team eliminations
         if (!hasPrefix) return false;
 
@@ -569,6 +667,8 @@ class HiveEventScorer {
     }
 
     detectWinner(line, hasPrefix) {
+        if (this.isBlockDropMode()) return false;
+
         // Pattern: "[TEAM] is the WINNER" or BedWars' "[TEAM] are the champions"
         const match = hasPrefix ?
             line.match(/»\s*(.+?)\s+(?:Team\s+)?(?:is the WINNER|are the champions?|is the champion)!?$/i) :
@@ -581,6 +681,7 @@ class HiveEventScorer {
                 // Winner gets 1st place
                 this.awardPoints(teamName, '1st place');
                 this.addLog(`${teamName} WON!`, 'success');
+                this.currentGameCompleted = true;
 
                 // Finalize all team and player placements
                 this.finalizeGamePlacements(teamName);
@@ -591,6 +692,8 @@ class HiveEventScorer {
     }
 
     detectKill(line, hasPrefix) {
+        if (this.isBlockDropMode()) return false;
+
         // Simplified detection: just check for prefix and extract player names
         if (!hasPrefix) return false;
 
@@ -685,6 +788,8 @@ class HiveEventScorer {
     }
 
     detectBedBreak(line, hasPrefix) {
+        if (this.isBlockDropMode()) return false;
+
         // Pattern: "PlayerName destroyed [TEAM]'s bed" or "Your bed was destroyed by PlayerName"
         const match = hasPrefix ?
             line.match(/»\s*(.+?)\s+destroyed\s+(.+?)['']?s?\s+bed/i) ||
@@ -714,14 +819,35 @@ class HiveEventScorer {
     }
 
     detectIndividualPlacement(line) {
-        // Pattern: "PlayerName finished in 1st place"
-        const match = line.match(/(.+?)\s+finished in\s+(\d+)(?:st|nd|rd|th)\s+place/i);
-        if (match) {
-            const playerName = match[1].trim();
-            const position = parseInt(match[2]);
+        // Patterns:
+        // - "PlayerName has finished in 2nd place"
+        // - "PlayerName finished in 2nd place"
+        // - "1st Place: PlayerName"
+        const hasFinishedMatch = line.match(/(?:»\s*)?([A-Za-z0-9_]+)\s+has\s+finished in\s+(\d+)(?:st|nd|rd|th)\s+place/i);
+        const finishedMatch = line.match(/(?:»\s*)?([A-Za-z0-9_]+)\s+finished in\s+(\d+)(?:st|nd|rd|th)\s+place/i);
+        const leaderboardMatch = line.match(/(?:»\s*)?(\d+)(?:st|nd|rd|th)\s+Place:\s+([A-Za-z0-9_]+)/i);
+
+        let playerName = null;
+        let position = null;
+
+        if (hasFinishedMatch) {
+            playerName = hasFinishedMatch[1].trim();
+            position = parseInt(hasFinishedMatch[2], 10);
+        } else if (finishedMatch) {
+            playerName = finishedMatch[1].trim();
+            position = parseInt(finishedMatch[2], 10);
+        } else if (leaderboardMatch) {
+            position = parseInt(leaderboardMatch[1], 10);
+            playerName = leaderboardMatch[2].trim();
+        }
+
+        if (playerName && Number.isInteger(position)) {
 
             const team = this.findPlayerTeam(playerName);
             if (team) {
+                const playerStats = this.getOrCreatePlayerStats(playerName, team);
+                playerStats.placement = `${position}${this.getOrdinalSuffix(position)}`;
+
                 let placementKey = null;
                 if (position === 1) placementKey = '1st place';
                 else if (position === 2) placementKey = '2nd place';
@@ -730,25 +856,36 @@ class HiveEventScorer {
                 else if (position === 5) placementKey = '5th place';
 
                 if (placementKey) {
-                    this.awardPoints(team, placementKey);
-                    this.scores[team].placements.push({
-                        player: playerName,
-                        position: position,
-                        time: new Date().toISOString()
-                    });
+                    const alreadyRecorded = this.scores[team]?.placements?.some(
+                        p => p.player === playerName && p.position === position
+                    );
+
+                    if (!alreadyRecorded) {
+                        this.awardPoints(team, placementKey);
+                        this.scores[team].placements.push({
+                            player: playerName,
+                            position: position,
+                            time: new Date().toISOString()
+                        });
+                    }
+
                     this.addLog(`${team} - ${playerName} finished ${position}${this.getOrdinalSuffix(position)}`, 'info');
+                }
 
-                    // Track player finish for team finish detection
-                    if (!this.playersFinished[team]) {
-                        this.playersFinished[team] = [];
-                    }
-                    if (!this.playersFinished[team].includes(playerName)) {
-                        this.playersFinished[team].push(playerName);
-                        this.checkTeamFullyFinished(team);
-                    }
-
+                if (this.isBlockDropMode()) {
                     return true;
                 }
+
+                // Track player finish for team finish detection
+                if (!this.playersFinished[team]) {
+                    this.playersFinished[team] = [];
+                }
+                if (!this.playersFinished[team].includes(playerName)) {
+                    this.playersFinished[team].push(playerName);
+                    this.checkTeamFullyFinished(team);
+                }
+
+                return true;
             }
         }
         return false;
@@ -827,39 +964,59 @@ class HiveEventScorer {
             totalPlayers += this.teams[teamName].players.length;
         }
 
-        // Assign placements based on elimination order
+        // Assign placements based on elimination order.
+        // First eliminated gets last place, survivors get top placements.
+        const assignedPlayers = new Set();
+
         for (let i = 0; i < this.playerEliminationOrder.length; i++) {
             const playerName = this.playerEliminationOrder[i];
             const placement = totalPlayers - i; // First eliminated = last place
             const team = this.findPlayerTeam(playerName);
 
             if (team) {
-                let placementKey = null;
-                if (placement === 1) placementKey = '1st place';
-                else if (placement === 2) placementKey = '2nd place';
-                else if (placement === 3) placementKey = '3rd place';
-                else if (placement === 4) placementKey = '4th place';
-                else if (placement === 5) placementKey = '5th place';
+                this.recordPlayerPlacement(team, playerName, placement);
+                assignedPlayers.add(playerName);
+            }
+        }
 
-                if (placementKey) {
-                    // Check if this player already has a placement recorded
-                    const alreadyRecorded = this.scores[team]?.placements.some(
-                        p => p.player === playerName
-                    );
-
-                    if (!alreadyRecorded) {
-                        this.awardPoints(team, placementKey);
-                        if (!this.scores[team].placements) {
-                            this.scores[team].placements = [];
-                        }
-                        this.scores[team].placements.push({
-                            player: playerName,
-                            position: placement,
-                            time: new Date().toISOString()
-                        });
-                    }
+        const remainingPlayers = [];
+        for (const teamName in this.teams) {
+            const teamPlayers = this.teams[teamName]?.players || [];
+            for (const playerName of teamPlayers) {
+                if (!assignedPlayers.has(playerName)) {
+                    remainingPlayers.push({ playerName, teamName });
                 }
             }
+        }
+
+        remainingPlayers.sort((a, b) => a.playerName.localeCompare(b.playerName));
+        for (let i = 0; i < remainingPlayers.length; i++) {
+            const placement = remainingPlayers.length - i;
+            this.recordPlayerPlacement(remainingPlayers[i].teamName, remainingPlayers[i].playerName, placement);
+        }
+    }
+
+    recordPlayerPlacement(teamName, playerName, position) {
+        const placementKey = this.getPlacementKey(position);
+        const player = this.getOrCreatePlayerStats(playerName, teamName);
+        player.placement = `${position}${this.getOrdinalSuffix(position)}`;
+
+        if (!placementKey) return;
+
+        const alreadyRecorded = this.scores[teamName]?.placements.some(
+            p => p.player === playerName
+        );
+
+        if (!alreadyRecorded) {
+            this.awardPoints(teamName, placementKey);
+            if (!this.scores[teamName].placements) {
+                this.scores[teamName].placements = [];
+            }
+            this.scores[teamName].placements.push({
+                player: playerName,
+                position,
+                time: new Date().toISOString()
+            });
         }
     }
 
@@ -1048,14 +1205,7 @@ class HiveEventScorer {
 
     clearAllPlayers() {
         // Save current state for undo
-        const undoState = {
-            action: 'clearAllPlayers',
-            teams: JSON.parse(JSON.stringify(this.teams)),
-            activityLog: JSON.parse(JSON.stringify(this.activityLog)),
-            playerStats: JSON.parse(JSON.stringify(this.playerStats))
-        };
-
-        this.undoStack.push(undoState);
+        this.pushUndoState('clearAllPlayers');
 
         // Get all player names before clearing
         const allPlayerNames = [];
@@ -1083,14 +1233,15 @@ class HiveEventScorer {
 
         this.addLog('All players cleared from all teams', 'warning');
         this.saveTeams();
+        this.syncPersistentData();
         this.renderTeams();
         this.updateUI();
 
         // Enable undo button
         const undoBtn = document.getElementById('undoBtn');
-        if (undoBtn) {
-            undoBtn.disabled = false;
-        }
+        const redoBtn = document.getElementById('redoBtn');
+        if (undoBtn) undoBtn.disabled = false;
+        if (redoBtn) redoBtn.disabled = true;
     }
 
     performUndo() {
@@ -1100,20 +1251,17 @@ class HiveEventScorer {
         }
 
         const undoState = this.undoStack.pop();
+        this.redoStack.push(this.captureUndoSnapshot(undoState.action));
 
         switch (undoState.action) {
             case 'clearAllPlayers':
-                // Restore teams
-                this.teams = undoState.teams;
-
-                // Restore activity log
-                this.activityLog = undoState.activityLog;
-
-                // Restore player stats
-                this.playerStats = undoState.playerStats;
+            case 'startNewGame':
+            case 'saveGameToHistory':
+                this.restoreUndoSnapshot(undoState);
 
                 this.addLog('Undo: Restored all players', 'info');
                 this.saveTeams();
+                this.syncPersistentData();
                 this.renderTeams();
                 this.updateUI();
                 break;
@@ -1124,9 +1272,88 @@ class HiveEventScorer {
 
         // Disable undo button if stack is empty
         const undoBtn = document.getElementById('undoBtn');
-        if (undoBtn && this.undoStack.length === 0) {
-            undoBtn.disabled = true;
+        const redoBtn = document.getElementById('redoBtn');
+        if (undoBtn) undoBtn.disabled = this.undoStack.length === 0;
+        if (redoBtn) redoBtn.disabled = this.redoStack.length === 0;
+    }
+
+    performRedo() {
+        if (this.redoStack.length === 0) {
+            alert('Nothing to redo!');
+            return;
         }
+
+        const redoState = this.redoStack.pop();
+        this.undoStack.push(this.captureUndoSnapshot(redoState.action));
+
+        switch (redoState.action) {
+            case 'clearAllPlayers':
+            case 'startNewGame':
+            case 'saveGameToHistory':
+                this.restoreUndoSnapshot(redoState);
+                this.addLog('Redo: Cleared all players', 'info');
+                this.saveTeams();
+                this.syncPersistentData();
+                this.renderTeams();
+                this.updateUI();
+                break;
+
+            default:
+                console.warn('Unknown redo action:', redoState.action);
+        }
+
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        if (undoBtn) undoBtn.disabled = this.undoStack.length === 0;
+        if (redoBtn) redoBtn.disabled = this.redoStack.length === 0;
+    }
+
+    captureUndoSnapshot(action) {
+        return {
+            action,
+            currentGame: JSON.parse(JSON.stringify(this.currentGame)),
+            gameHistory: JSON.parse(JSON.stringify(this.gameHistory)),
+            teams: JSON.parse(JSON.stringify(this.teams)),
+            activityLog: JSON.parse(JSON.stringify(this.activityLog)),
+            playerStats: JSON.parse(JSON.stringify(this.playerStats)),
+            scores: JSON.parse(JSON.stringify(this.scores)),
+            eliminationOrder: JSON.parse(JSON.stringify(this.eliminationOrder)),
+            playerEliminationOrder: JSON.parse(JSON.stringify(this.playerEliminationOrder)),
+            playersFinished: JSON.parse(JSON.stringify(this.playersFinished)),
+            teamsFullyFinished: JSON.parse(JSON.stringify(this.teamsFullyFinished))
+        };
+    }
+
+    restoreUndoSnapshot(snapshot) {
+        this.currentGame = JSON.parse(JSON.stringify(snapshot.currentGame));
+        this.gameHistory = JSON.parse(JSON.stringify(snapshot.gameHistory));
+        this.teams = JSON.parse(JSON.stringify(snapshot.teams));
+        this.activityLog = JSON.parse(JSON.stringify(snapshot.activityLog));
+        this.playerStats = JSON.parse(JSON.stringify(snapshot.playerStats));
+        this.scores = JSON.parse(JSON.stringify(snapshot.scores));
+        this.eliminationOrder = JSON.parse(JSON.stringify(snapshot.eliminationOrder));
+        this.playerEliminationOrder = JSON.parse(JSON.stringify(snapshot.playerEliminationOrder));
+        this.playersFinished = JSON.parse(JSON.stringify(snapshot.playersFinished));
+        this.teamsFullyFinished = JSON.parse(JSON.stringify(snapshot.teamsFullyFinished));
+    }
+
+    updateUndoRedoButtons() {
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+
+        if (undoBtn) {
+            undoBtn.disabled = this.undoStack.length === 0;
+        }
+
+        if (redoBtn) {
+            redoBtn.disabled = this.redoStack.length === 0;
+        }
+    }
+
+    pushUndoState(action) {
+        this.undoStack.push(this.captureUndoSnapshot(action));
+        this.redoStack = [];
+        this.updateUndoRedoButtons();
     }
 
     changePlayerTeam(playerName, oldTeam, newTeam) {
@@ -1332,6 +1559,9 @@ class HiveEventScorer {
     renderPlayerStats() {
         const playerStats = document.getElementById('playerStats');
         if (!playerStats) return;
+        const features = this.getGamemodeFeatures(this.gamemode) || {};
+        const showCombatStats = !!features.kills;
+        const showBedBreaks = !!features.bedBreaks;
 
         if (Object.keys(this.playerStats).length === 0) {
             playerStats.innerHTML = '<p class=\"empty-state\">No player data yet! Process some chat to see stats.</p>';
@@ -1339,16 +1569,38 @@ class HiveEventScorer {
         }
 
         let html = '<div class=\"player-stats-grid\">';
-        const sortedPlayers = Object.entries(this.playerStats)
-            .filter(([playerName]) => this.findPlayerTeam(playerName)) // Only show registered players
-            .sort((a, b) => {
-                // Sort by: eliminated (false first), then by kills, then by deaths (fewer is better)
-                if (a[1].eliminated !== b[1].eliminated) return a[1].eliminated ? 1 : -1;
-                if (b[1].kills !== a[1].kills) return b[1].kills - a[1].kills;
-                return a[1].deaths - b[1].deaths;
-            });
+        const playerRows = Object.entries(this.playerStats)
+            .filter(([playerName]) => this.findPlayerTeam(playerName))
+            .map(([playerName, data]) => ({
+                playerName,
+                data,
+                contribution: this.calculateCurrentPlayerContribution(playerName, data)
+            }));
 
-        for (const [playerName, data] of sortedPlayers) {
+        playerRows.sort((a, b) => {
+            const sortMode = this.playerStatsSort || 'points';
+
+            if (sortMode === 'points') return b.contribution - a.contribution;
+            if (sortMode === 'kills') return b.data.kills - a.data.kills;
+            if (sortMode === 'finalKills') return b.data.finalKills - a.data.finalKills;
+            if (sortMode === 'bedBreaks') return (b.data.bedBreaks || 0) - (a.data.bedBreaks || 0);
+            if (sortMode === 'deathsLow') return a.data.deaths - b.data.deaths;
+            if (sortMode === 'deathsHigh') return b.data.deaths - a.data.deaths;
+            if (sortMode === 'placement') {
+                const getPlacementNumber = (placement) => {
+                    if (!placement) return Number.MAX_SAFE_INTEGER;
+                    const match = String(placement).match(/\d+/);
+                    return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
+                };
+                return getPlacementNumber(a.data.placement) - getPlacementNumber(b.data.placement);
+            }
+
+            return 0;
+        });
+
+        for (const row of playerRows) {
+            const playerName = row.playerName;
+            const data = row.data;
             const teamColor = this.teams[data.team]?.color || '#888';
             const eliminatedClass = data.eliminated ? 'eliminated' : '';
 
@@ -1356,24 +1608,30 @@ class HiveEventScorer {
                 <div class=\"player-stat-card ${eliminatedClass}\" style=\"border-left: 4px solid ${teamColor}\">
                     <h3>${this.escapeHtml(playerName)}</h3>
                     <div class=\"stat-badge\" style=\"background: ${teamColor}\">${data.team}</div>
-                    <div class=\"stat-row\">
-                        <span>Status:</span>
-                        <span>${data.eliminated ? 'G�� Eliminated' : 'G�� Active'}</span>
+                    <div class=\"stat-row highlight\">
+                        <span>Points:</span>
+                        <span>${row.contribution}</span>
                     </div>
                     <div class=\"stat-row\">
+                        <span>Status:</span>
+                        <span>${data.eliminated ? 'Eliminated' : 'Active'}</span>
+                    </div>
+                    ${showCombatStats ? `
+                    <div class="stat-row">
                         <span>Kills:</span>
                         <span>${data.kills}</span>
                     </div>
-                    <div class=\"stat-row\">
+                    <div class="stat-row">
                         <span>Deaths:</span>
                         <span>${data.deaths}</span>
                     </div>
-                    <div class=\"stat-row\">
+                    <div class="stat-row">
                         <span>Final Kills:</span>
                         <span>${data.finalKills}</span>
                     </div>
-                    ${data.bedBreaks > 0 ? `
-                    <div class=\"stat-row\">
+                    ` : ''}
+                    ${showBedBreaks && data.bedBreaks > 0 ? `
+                    <div class="stat-row">
                         <span>Bed Breaks:</span>
                         <span>${data.bedBreaks}</span>
                     </div>
@@ -1390,6 +1648,13 @@ class HiveEventScorer {
         html += '</div>';
 
         playerStats.innerHTML = html;
+    }
+
+    calculateCurrentPlayerContribution(playerName, playerData) {
+        if (!playerData || !playerData.team) return 0;
+        const teamScore = this.scores[playerData.team];
+        const pointSystem = this.getPointSystemForGamemode(this.gamemode) || {};
+        return this.calculatePlayerContributionFromTeamScore(teamScore, playerName, playerData, pointSystem);
     }
 
     renderGameHistory() {
@@ -1411,11 +1676,14 @@ class HiveEventScorer {
             const isEditing = String(this.editingGameId) === String(game.id);
             const sortedTeams = Object.entries(game.scores).sort((a, b) => b[1].score - a[1].score);
             const winner = sortedTeams[0];
+            const gameFeatures = this.getGamemodeFeatures(game.gamemode) || {};
+            const showGameCombatStats = !!gameFeatures.kills;
+            const showGameBedBreaks = !!gameFeatures.bedBreaks;
 
             html += `
                 <div class=\"game-history-card ${isEditing ? 'editing' : ''}\" data-game-id=\"${game.id}\">
                     <div class=\"game-header\">
-                        <h3>=�ī ${game.gamemode}</h3>
+                        <h3>${game.gamemode}</h3>
                         <span class=\"game-date\">${startDate.toLocaleString()}</span>
                     </div>
                     <div class=\"game-info\">
@@ -1458,16 +1726,18 @@ class HiveEventScorer {
                             <div class=\"player-stats-grid\">
                                 ${Object.entries(game.playerStats).map(([playerName, data]) => {
                 const teamColor = this.teams[data.team]?.color || '#888';
+                const contribution = this.calculatePlayerContributionForGame(game, playerName, data);
                 return `
                                         <div class=\"player-stat-card mini\" style=\"border-left: 4px solid ${teamColor}\">
                                             <strong>${this.escapeHtml(playerName)}</strong>
                                             <div class=\"stat-badge\" style=\"background: ${teamColor}\">${data.team}</div>
                                             <div class=\"mini-stats\">
-                                                <span>K: ${data.kills}</span>
-                                                <span>D: ${data.deaths}</span>
-                                                <span>FK: ${data.finalKills}</span>
-                                                ${data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
-                                                ${data.placement ? `<span>=��� #${data.placement}</span>` : ''}
+                                                <span>Pts: ${contribution}</span>
+                                                ${showGameCombatStats ? `<span>K: ${data.kills}</span>` : ''}
+                                                ${showGameCombatStats ? `<span>D: ${data.deaths}</span>` : ''}
+                                                ${showGameCombatStats ? `<span>FK: ${data.finalKills}</span>` : ''}
+                                                ${showGameBedBreaks && data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
+                                                ${data.placement ? `<span>Pl: ${data.placement}</span>` : ''}
                                             </div>
                                         </div>
                                     `;
@@ -1480,6 +1750,83 @@ class HiveEventScorer {
         }
 
         gameHistory.innerHTML = html;
+    }
+
+    getPointSystemForGamemode(gamemode) {
+        if (!gamemode) return null;
+        if (this.pointSystems[gamemode]) return this.pointSystems[gamemode];
+
+        const normalized = gamemode.replace(/\s+/g, '').toLowerCase();
+        for (const [modeName, pointSystem] of Object.entries(this.pointSystems)) {
+            if (modeName.replace(/\s+/g, '').toLowerCase() === normalized) {
+                return pointSystem;
+            }
+        }
+
+        return null;
+    }
+
+    getGamemodeFeatures(gamemode) {
+        if (!gamemode) return null;
+        if (this.gamemodeFeatures[gamemode]) return this.gamemodeFeatures[gamemode];
+
+        const normalized = gamemode.replace(/\s+/g, '').toLowerCase();
+        for (const [modeName, features] of Object.entries(this.gamemodeFeatures)) {
+            if (modeName.replace(/\s+/g, '').toLowerCase() === normalized) {
+                return features;
+            }
+        }
+
+        return null;
+    }
+
+    calculatePlayerContributionForGame(game, playerName, playerData) {
+        if (!game || !playerData || !playerData.team || !game.scores) return 0;
+
+        const teamScore = game.scores[playerData.team];
+        const pointSystem = this.getPointSystemForGamemode(game.gamemode) || {};
+        return this.calculatePlayerContributionFromTeamScore(teamScore, playerName, playerData, pointSystem);
+    }
+
+    calculatePlayerContributionFromTeamScore(teamScore, playerName, playerData, pointSystem) {
+        if (!teamScore) return 0;
+
+        const killPoints = Number(pointSystem['Kill'] || 0);
+        const bedBreakPoints = Number(pointSystem['Bed Break'] || 0);
+        let contribution = 0;
+
+        if (Array.isArray(teamScore.kills)) {
+            contribution += teamScore.kills.filter(event => event.player === playerName).length * killPoints;
+        }
+
+        if (Array.isArray(teamScore.bedBreaks)) {
+            contribution += teamScore.bedBreaks.filter(event => event.player === playerName).length * bedBreakPoints;
+        }
+
+        let hasPlacementRecord = false;
+        if (Array.isArray(teamScore.placements)) {
+            for (const placement of teamScore.placements) {
+                if (placement.player !== playerName) continue;
+                hasPlacementRecord = true;
+
+                const placementKey = this.getPlacementKey(Number(placement.position));
+                if (placementKey && pointSystem[placementKey] !== undefined) {
+                    contribution += Number(pointSystem[placementKey]);
+                }
+            }
+        }
+
+        if (!hasPlacementRecord && playerData.placement) {
+            const placementMatch = String(playerData.placement).match(/\d+/);
+            if (placementMatch) {
+                const placementKey = this.getPlacementKey(Number(placementMatch[0]));
+                if (placementKey && pointSystem[placementKey] !== undefined) {
+                    contribution += Number(pointSystem[placementKey]);
+                }
+            }
+        }
+
+        return contribution;
     }
 
     renderOverallStats() {
@@ -1508,7 +1855,7 @@ class HiveEventScorer {
 
         let html = `
             <div class=\"tutorial-tip\">
-                <strong>G�� Tutorial Tip:</strong> You can edit the per-gamemode scores below to fix bugs or make arbitrary point adjustments. Just click the score value next to each gamemode, change it, and press Enter or click outside to save.
+                <strong>Tutorial Tip:</strong> You can edit the per-gamemode scores below to fix bugs or make arbitrary point adjustments. Just click the score value next to each gamemode, change it, and press Enter or click outside to save.
             </div>
 
             <div class=\"overall-summary\">
@@ -1736,10 +2083,16 @@ class HiveEventScorer {
         return text.replace(/§[0-9a-fk-or]/gi, '').trim();
     }
 
+    isBlockDropMode() {
+        if (!this.gamemode) return false;
+        return this.gamemode.replace(/\s+/g, '').toLowerCase() === 'blockdrop';
+    }
+
     updateUI() {
         this.updateStats();
         this.updateScoreboard();
         this.updateActivityLog();
+        this.updateUndoRedoButtons();
         document.getElementById('currentGamemode').textContent = this.gamemode || 'None';
     }
 
@@ -1846,6 +2199,42 @@ class HiveEventScorer {
         this.updateActivityLog();
     }
 
+    loadPersistentData() {
+        try {
+            const savedEventData = localStorage.getItem('hive_event_data');
+            const savedGameHistory = localStorage.getItem('hive_game_history');
+
+            if (savedEventData) {
+                const data = JSON.parse(savedEventData);
+                if (data.currentGame) this.currentGame = data.currentGame;
+                if (data.scores) this.scores = data.scores;
+                if (data.playerStats) this.playerStats = data.playerStats;
+                if (data.eliminationOrder) this.eliminationOrder = data.eliminationOrder;
+                if (data.playerEliminationOrder) this.playerEliminationOrder = data.playerEliminationOrder;
+                if (data.playersFinished) this.playersFinished = data.playersFinished;
+                if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
+                if (data.undoStack) this.undoStack = data.undoStack;
+                if (data.redoStack) this.redoStack = data.redoStack;
+                if (!data.undoStack) this.undoStack = [];
+                if (!data.redoStack) this.redoStack = [];
+                if (data.gamemode) this.gamemode = data.gamemode;
+                if (Array.isArray(data.gameHistory)) this.gameHistory = data.gameHistory;
+            }
+
+            if (savedGameHistory) {
+                const parsedHistory = JSON.parse(savedGameHistory);
+                if (Array.isArray(parsedHistory)) {
+                    this.gameHistory = parsedHistory;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading persistent data:', error);
+            this.gameHistory = [];
+            this.undoStack = [];
+            this.redoStack = [];
+        }
+    }
+
     loadTeams() {
         const saved = localStorage.getItem('hive_teams');
         if (saved) {
@@ -1868,6 +2257,8 @@ class HiveEventScorer {
             gameHistory: this.gameHistory,
             playersFinished: this.playersFinished,
             teamsFullyFinished: this.teamsFullyFinished,
+            undoStack: this.undoStack,
+            redoStack: this.redoStack,
             gamemode: this.gamemode,
             saveDate: new Date().toISOString()
         };
@@ -1903,6 +2294,10 @@ class HiveEventScorer {
                 if (data.gameHistory) this.gameHistory = data.gameHistory;
                 if (data.playersFinished) this.playersFinished = data.playersFinished;
                 if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
+                if (data.undoStack) this.undoStack = data.undoStack;
+                if (data.redoStack) this.redoStack = data.redoStack;
+                if (!data.undoStack) this.undoStack = [];
+                if (!data.redoStack) this.redoStack = [];
                 if (data.gamemode) this.gamemode = data.gamemode;
 
                 // Update UI to reflect loaded data
@@ -2346,6 +2741,55 @@ class HiveEventScorer {
                 settingsSelect.value = currentValue;
             }
         }
+
+        this.applySavedGamemodeSelection();
+        this.syncGamemodeFromSelection();
+    }
+
+    normalizeGamemodeName(gamemode) {
+        if (!gamemode) return '';
+        return String(gamemode).replace(/\s+/g, '').toLowerCase();
+    }
+
+    applySavedGamemodeSelection() {
+        if (!this.gamemode) return;
+
+        const normalizedSaved = this.normalizeGamemodeName(this.gamemode);
+        const mainSelect = document.getElementById('gamemode');
+        const settingsSelect = document.getElementById('settingsGamemode');
+
+        if (mainSelect) {
+            const match = Array.from(mainSelect.options).find(option =>
+                this.normalizeGamemodeName(option.value) === normalizedSaved
+            );
+            if (match) {
+                mainSelect.value = match.value;
+                this.gamemode = match.value;
+            }
+        }
+
+        if (settingsSelect) {
+            const match = Array.from(settingsSelect.options).find(option =>
+                this.normalizeGamemodeName(option.value) === normalizedSaved
+            );
+            if (match) {
+                settingsSelect.value = match.value;
+            }
+        }
+    }
+
+    syncGamemodeFromSelection() {
+        const mainSelect = document.getElementById('gamemode');
+        if (!mainSelect) return;
+
+        if (!this.gamemode && mainSelect.value) {
+            this.gamemode = mainSelect.value;
+            return;
+        }
+
+        if (this.gamemode && mainSelect.value && this.gamemode !== mainSelect.value) {
+            this.gamemode = mainSelect.value;
+        }
     }
 
     // Check if there's data worth saving
@@ -2368,6 +2812,8 @@ class HiveEventScorer {
                 gameHistory: this.gameHistory,
                 playersFinished: this.playersFinished,
                 teamsFullyFinished: this.teamsFullyFinished,
+                undoStack: this.undoStack,
+                redoStack: this.redoStack,
                 gamemode: this.gamemode,
                 timestamp: new Date().toISOString()
             };
@@ -2400,6 +2846,10 @@ class HiveEventScorer {
                         if (data.gameHistory) this.gameHistory = data.gameHistory;
                         if (data.playersFinished) this.playersFinished = data.playersFinished;
                         if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
+                        if (data.undoStack) this.undoStack = data.undoStack;
+                        if (data.redoStack) this.redoStack = data.redoStack;
+                        if (!data.undoStack) this.undoStack = [];
+                        if (!data.redoStack) this.redoStack = [];
                         if (data.gamemode) this.gamemode = data.gamemode;
 
                         this.addLog('Emergency backup restored', 'success');
