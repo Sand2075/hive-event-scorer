@@ -457,8 +457,14 @@ class HiveEventScorer {
 
     parseLine(line) {
         // Check if line has the kill/elimination prefix
-        const hasPrefix = line.includes('-§c§l-+');
         const cleanLine = this.stripColorCodes(line);
+        const hasPrefix = cleanLine.startsWith('»');
+
+        if (this.gamemode === 'BedWars') {
+            if (this.detectBedWarsEvent(cleanLine)) {
+                return true;
+            }
+        }
 
         // Check for team elimination
         if (this.detectTeamElimination(cleanLine, hasPrefix)) {
@@ -482,6 +488,48 @@ class HiveEventScorer {
 
         // Check for individual placements
         if (this.detectIndividualPlacement(cleanLine)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    detectBedWarsEvent(line) {
+        if (this.detectKill(line, true)) {
+            return true;
+        }
+
+        if (this.detectBedBreak(line, true)) {
+            return true;
+        }
+
+        if (this.detectWinner(line, true)) {
+            return true;
+        }
+
+        const teamEliminationMatch = line.match(/»\s*(.+?)\s+(?:Team\s+)?has been eliminated!?$/i);
+        if (teamEliminationMatch) {
+            const teamName = teamEliminationMatch[1].trim().toUpperCase();
+
+            if (this.teams[teamName]) {
+                this.eliminationOrder.push(teamName);
+
+                const team = this.teams[teamName];
+                if (team.players) {
+                    for (const playerName of team.players) {
+                        this.markPlayerEliminated(playerName, teamName);
+                    }
+                }
+
+                this.addLog(`${teamName} eliminated (${this.eliminationOrder.length} teams out)`, 'warning');
+                this.recordTeamEliminationIfNeeded(teamName);
+                this.tryFinalizeGamePlacements();
+                return true;
+            }
+        }
+
+        if (/»\s*(?:Game OVER!|All remaining beds have been destroyed)/i.test(line)) {
+            this.addLog('BedWars game over', 'info');
             return true;
         }
 
@@ -521,11 +569,10 @@ class HiveEventScorer {
     }
 
     detectWinner(line, hasPrefix) {
-        // Pattern: "[TEAM] is the WINNER"
-        // Can work with or without prefix
+        // Pattern: "[TEAM] is the WINNER" or BedWars' "[TEAM] are the champions"
         const match = hasPrefix ?
-            line.match(/»\s*(.+?)\s+is the WINNER/i) :
-            line.match(/(.+?)\s+is the WINNER/i);
+            line.match(/»\s*(.+?)\s+(?:Team\s+)?(?:is the WINNER|are the champions?|is the champion)!?$/i) :
+            line.match(/(.+?)\s+(?:Team\s+)?(?:is the WINNER|are the champions?|is the champion)!?$/i);
 
         if (match) {
             const teamName = match[1].trim().toUpperCase();
@@ -638,15 +685,15 @@ class HiveEventScorer {
     }
 
     detectBedBreak(line, hasPrefix) {
-        // Pattern: "PlayerName destroyed [TEAM]'s bed"
-        // More consistent with prefix
-        const pattern = hasPrefix ?
-            /»\s*(.+?)\s+destroyed\s+(.+?)['']?s?\s+bed/i :
-            /(.+?)\s+destroyed\s+(.+?)['']?s?\s+bed/i;
+        // Pattern: "PlayerName destroyed [TEAM]'s bed" or "Your bed was destroyed by PlayerName"
+        const match = hasPrefix ?
+            line.match(/»\s*(.+?)\s+destroyed\s+(.+?)['']?s?\s+bed/i) ||
+            line.match(/»\s*Your bed was destroyed by\s+(.+)/i) :
+            line.match(/(.+?)\s+destroyed\s+(.+?)['']?s?\s+bed/i) ||
+            line.match(/Your bed was destroyed by\s+(.+)/i);
 
-        const match = line.match(pattern);
         if (match) {
-            const breaker = match[1].trim();
+            const breaker = match[2] ? match[1].trim() : match[1].trim();
 
             const breakerTeam = this.findPlayerTeam(breaker);
             if (breakerTeam) {
