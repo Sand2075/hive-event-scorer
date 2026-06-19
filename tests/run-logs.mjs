@@ -146,11 +146,13 @@ function killCount(state, t) { return state.scores[t] ? state.scores[t].kills.le
 (function () {
     const { state } = processLog('skywars 2.txt', 'SkyWars', TEAMS_SKYWARS);
     const elim = state.eliminationOrder;
-    check('SkyWars2: Yellow eliminated', elim.includes('YELLOW'));
+    // In SW2: in-game Yellow = app BLUE (structural inference from player kills).
+    // In-game Blue = app YELLOW (they win). Elim order: BLUE, LIME, RED → YELLOW wins.
+    check('SkyWars2: Blue eliminated (in-game Yellow = app Blue)', elim.includes('BLUE'));
     check('SkyWars2: Lime eliminated', elim.includes('LIME'));
     check('SkyWars2: Red eliminated', elim.includes('RED'));
-    check('SkyWars2: Blue wins (1st place)',
-        state.scores.BLUE && state.scores.BLUE.events.some(e => e.type === '1st place'));
+    check('SkyWars2: Yellow wins (in-game Blue = app Yellow, 1st place)',
+        state.scores.YELLOW && state.scores.YELLOW.events.some(e => e.type === '1st place'));
     check('SkyWars2: Bo0ky banished several (kills>=3)',
         state.playerStats.Bo0ky && state.playerStats.Bo0ky.kills >= 3,
         'kills=' + (state.playerStats.Bo0ky ? state.playerStats.Bo0ky.kills : 0));
