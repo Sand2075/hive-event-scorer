@@ -5,16 +5,26 @@
 
 /* ---------- header ---------- */
 header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
+    position: relative;
     padding: 18px 24px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-left: 5px solid var(--hive-purple);
     border-radius: var(--radius);
     margin-bottom: 20px;
+}
+
+.header-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.header-save-actions {
+    position: absolute;
+    bottom: 14px;
+    right: 18px;
+    display: flex;
+    gap: 8px;
 }
 
 .minecraft-title {
@@ -27,8 +37,6 @@ header {
 
 .subtitle { color: var(--text-soft); font-size: 0.9rem; margin-top: 8px; }
 .disclaimer { color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; }
-
-.header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- nav tabs ---------- */
 nav ul {
@@ -229,6 +237,7 @@ textarea { resize: vertical; min-height: 90px; }
 .remove-player-btn {
     background: transparent; border: 1px solid var(--danger); color: var(--danger);
     border-radius: var(--radius-sm); width: 26px; height: 26px; cursor: pointer; line-height: 1;
+    flex-shrink: 0;
 }
 .remove-player-btn:hover { background: rgba(248,113,113,.15); }
 
@@ -304,8 +313,10 @@ textarea { resize: vertical; min-height: 90px; }
 .game-header { display: flex; justify-content: space-between; align-items: center; }
 .game-date { color: var(--text-muted); font-size: 0.8rem; }
 .game-info { display: flex; gap: 18px; color: var(--text-soft); font-size: 0.85rem; margin: 8px 0; }
-.game-details summary { cursor: pointer; color: var(--hive-purple-light); font-weight: 600; }
-.game-scores-header { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 8px; }
+.game-scores { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
+.game-player-stats { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; }
+.game-player-stats h4 { margin-bottom: 8px; }
+.game-scores-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .score-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: var(--surface); border-radius: var(--radius-sm); margin-bottom: 5px; }
 .score-row .rank { color: var(--text-muted); font-weight: 700; }
 .score-row .team-name { flex: 1; font-weight: 600; }
@@ -401,7 +412,7 @@ textarea { resize: vertical; min-height: 90px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 720px) {
-    header { flex-direction: column; align-items: flex-start; }
+    header { padding-bottom: 52px; } /* room for the absolute-positioned save buttons */
     .team-creator { grid-template-columns: 1fr; }
     .gamemode-section { flex-direction: column; align-items: stretch; }
 }

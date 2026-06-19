@@ -217,52 +217,49 @@
                         <span>Duration: ${duration} min</span>
                         <span>Winner: ${winner ? this.escapeHtml(winner[0]) + ' (' + winner[1].score + ' pts)' : '-'}</span>
                     </div>
-                    <details class="game-details">
-                        <summary>View Full Scores &amp; Player Stats</summary>
-                        <div class="game-scores">
-                            <div class="game-scores-header">
-                                <h4>Team Scores</h4>
-                                ${editing ? `
-                                <div class="game-score-editor-actions">
-                                    <button type="button" class="btn btn-success btn-small" data-action="save-game-scores" data-game-id="${game.id}">Save Scores</button>
-                                    <button type="button" class="btn btn-secondary btn-small" data-action="cancel-game-scores" data-game-id="${game.id}">Cancel</button>
-                                </div>` : `
-                                <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>`}
-                            </div>
-                            ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
-                            ${teams.map(([teamName, data], i) => {
-                                const color = this.teamColor(teamName);
+                    <div class="game-scores">
+                        <div class="game-scores-header">
+                            <h4>Team Scores</h4>
+                            ${editing ? `
+                            <div class="game-score-editor-actions">
+                                <button type="button" class="btn btn-success btn-small" data-action="save-game-scores" data-game-id="${game.id}">Save Scores</button>
+                                <button type="button" class="btn btn-secondary btn-small" data-action="cancel-game-scores" data-game-id="${game.id}">Cancel</button>
+                            </div>` : `
+                            <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>`}
+                        </div>
+                        ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
+                        ${teams.map(([teamName, data], i) => {
+                            const color = this.teamColor(teamName);
+                            return `
+                                <div class="score-row" style="border-left: 3px solid ${color}">
+                                    <span class="rank">#${i + 1}</span>
+                                    <span class="team-name">${this.escapeHtml(teamName)}</span>
+                                    ${editing
+                                        ? `<input type="number" class="score-editor-input" data-team="${this.escapeHtml(teamName)}" value="${data.score}" min="0" />`
+                                        : `<span class="points">${data.score} pts</span>`}
+                                </div>`;
+                        }).join('')}
+                    </div>
+                    <div class="game-player-stats">
+                        <h4>Player Performance</h4>
+                        <div class="player-stats-grid">
+                            ${Object.entries(game.playerStats).map(([name, data]) => {
+                                const color = this.teamColor(data.team);
+                                const c = this.engine.gamePlayerContribution(game, name, data);
                                 return `
-                                    <div class="score-row" style="border-left: 3px solid ${color}">
-                                        <span class="rank">#${i + 1}</span>
-                                        <span class="team-name">${this.escapeHtml(teamName)}</span>
-                                        ${editing
-                                            ? `<input type="number" class="score-editor-input" data-team="${this.escapeHtml(teamName)}" value="${data.score}" min="0" />`
-                                            : `<span class="points">${data.score} pts</span>`}
+                                    <div class="player-stat-card mini" style="border-left: 4px solid ${color}">
+                                        <strong>${this.escapeHtml(name)}</strong>
+                                        <div class="stat-badge" style="background: ${color}">${this.escapeHtml(data.team)}</div>
+                                        <div class="mini-stats">
+                                            <span>Pts: ${c}</span>
+                                            ${data.placement ? `<span>Pl: ${data.placement}</span>` : ''}
+                                            ${showCombat ? `<span>K: ${data.kills}</span><span>D: ${data.deaths}</span><span>FK: ${data.finalKills}</span>` : ''}
+                                            ${showBeds && data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
+                                        </div>
                                     </div>`;
                             }).join('')}
                         </div>
-                        <div class="game-player-stats">
-                            <h4>Player Performance</h4>
-                            <div class="player-stats-grid">
-                                ${Object.entries(game.playerStats).map(([name, data]) => {
-                                    const color = this.teamColor(data.team);
-                                    const c = this.engine.gamePlayerContribution(game, name, data);
-                                    return `
-                                        <div class="player-stat-card mini" style="border-left: 4px solid ${color}">
-                                            <strong>${this.escapeHtml(name)}</strong>
-                                            <div class="stat-badge" style="background: ${color}">${this.escapeHtml(data.team)}</div>
-                                            <div class="mini-stats">
-                                                <span>Pts: ${c}</span>
-                                                ${data.placement ? `<span>Pl: ${data.placement}</span>` : ''}
-                                                ${showCombat ? `<span>K: ${data.kills}</span><span>D: ${data.deaths}</span><span>FK: ${data.finalKills}</span>` : ''}
-                                                ${showBeds && data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
-                                            </div>
-                                        </div>`;
-                                }).join('')}
-                            </div>
-                        </div>
-                    </details>
+                    </div>
                 </div>`;
         }
     }

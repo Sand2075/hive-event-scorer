@@ -81,6 +81,7 @@
             this.on('undoBtn', 'click', () => this.performUndo());
             this.on('redoBtn', 'click', () => this.performRedo());
 
+            // gameHistory lives in the History tab; wire its delegation once.
             const gh = document.getElementById('gameHistory');
             if (gh) gh.addEventListener('click', e => this.handleGameHistoryActions(e));
 
@@ -225,6 +226,7 @@
 
             if (tabName === 'teams') this.teamsView.render();
             else if (tabName === 'stats') this.statsView.renderAll();
+            else if (tabName === 'history') this.statsView.renderGameHistory();
             else if (tabName === 'settings') this.settingsView.renderAll();
         }
 

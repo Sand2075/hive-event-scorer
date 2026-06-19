@@ -18,7 +18,7 @@
 
     class SurvivalLastStandingParser extends Base {
         detect(clean) {
-            if (this.isNoise(clean)) return false;
+            if (this.isNoise(clean) || this.isLobbyLine(clean)) return false;
 
             const players = ChatUtils.findPlayersInText(clean, this.state.allPlayerNames());
 

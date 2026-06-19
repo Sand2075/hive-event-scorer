@@ -85,8 +85,8 @@ function mkEl(id, tag = 'div') { const e = new El(tag); e.id = id; registry.set(
     'saveSettings', 'resetSettings', 'exportSettings', 'importSettings', 'settingsFileInput'
 ].forEach(id => mkEl(id, id.includes('Input') || id === 'fileInput' ? 'input' : 'div'));
 
-const navTabs = ['scorer', 'teams', 'stats', 'settings'].map(t => { const e = new El('a'); e.dataset.tab = t; return e; });
-const tabContents = ['scorer', 'teams', 'stats', 'settings'].map(t => mkEl(t, 'div'));
+const navTabs = ['scorer', 'teams', 'stats', 'history', 'settings'].map(t => { const e = new El('a'); e.dataset.tab = t; return e; });
+const tabContents = ['scorer', 'teams', 'stats', 'history', 'settings'].map(t => mkEl(t, 'div'));
 
 const body = new El('body');
 body.contains = () => true;
@@ -102,6 +102,7 @@ global.document = {
         const m = sel.match(/\.nav-tab\[data-tab="(.+)"\]/);
         if (m) return navTabs.find(t => t.dataset.tab === m[1]) || null;
         if (sel === '.toast-stack') return null;
+        if (sel.startsWith('#exportTeamNames ')) return null;
         return null;
     },
     createElement: tag => new El(tag),
@@ -168,7 +169,7 @@ check('scoreboard rendered (non-empty)', /score-item/.test(document.getElementBy
 check('quick stat totalTeams set', document.getElementById('totalTeams').textContent !== '');
 
 // Tab switches render without throwing.
-try { app.switchTab('teams'); app.switchTab('stats'); app.switchTab('settings'); app.switchTab('scorer'); check('tab switches OK', true); }
+try { app.switchTab('teams'); app.switchTab('stats'); app.switchTab('history'); app.switchTab('settings'); app.switchTab('scorer'); check('tab switches OK', true); }
 catch (e) { check('tab switches OK', false, e.message); }
 
 // Stats render produced game-history (game completed on "Game OVER").

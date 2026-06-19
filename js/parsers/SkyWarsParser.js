@@ -21,10 +21,14 @@
             if (this.isNoise(clean)) return false;
             if (this.detectWinner(clean)) return true;
             if (this.detectTeamElimination(clean)) return true;
-            // "You were killed by X" -> local player death only.
-            const m = clean.match(/»?\s*You were killed by\s+(.+?)\.?\s*$/i);
+            // "You were killed by X" -> local player death + credit killer.
+            const m = clean.match(/»?\s*You were killed by\s+(.+?)(?:\.\s*They had .+)?$/i);
             if (m) {
                 const victim = this.resolvePlayerName('You');
+                const killerName = m[1].trim();
+                if (victim && killerName) {
+                    return this.recordKill(killerName, victim) !== false;
+                }
                 if (victim) return this.recordDeath(victim) !== false;
             }
             if (this.detectGenericKill(clean)) return true;
