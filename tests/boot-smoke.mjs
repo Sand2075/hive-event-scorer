@@ -74,7 +74,9 @@ function mkEl(id, tag = 'div') { const e = new El(tag); e.id = id; registry.set(
     'chatInput', 'undoBtn', 'redoBtn', 'resetScores', 'scoreboard', 'clearLog', 'activityLog',
     'totalTeams', 'totalPlayers', 'teamPlacements', 'currentGamemode',
     'playerName', 'teamSelect', 'addPlayer', 'bulkPlayerNames', 'addBulkPlayers', 'clearAllPlayers', 'teamsGrid',
-    'playerStatsSort', 'playerStats', 'pointRecord', 'gameHistory', 'overallStats',
+    'playerStatsSort', 'playerStats', 'pointRecord', 'gameHistory',
+    'eventStandings', 'playerTotals', 'exportPlayersPng', 'exportWinnersPng',
+    'playerModal', 'playerModalTitle', 'playerModalBody', 'playerModalClose',
     'settingsGamemode', 'addNewGamemode', 'deleteGamemode', 'pointsSettings',
     'patternTeamElim', 'patternWinner', 'patternKillPrefix', 'patternBedBreak', 'patternIndividualFinish',
     'patternKillGroup', 'patternBedBreakGroup', 'patternIndividualFinishGroup', 'myIgn',
@@ -84,7 +86,10 @@ function mkEl(id, tag = 'div') { const e = new El(tag); e.id = id; registry.set(
 const navTabs = ['scorer', 'teams', 'stats', 'settings'].map(t => { const e = new El('a'); e.dataset.tab = t; return e; });
 const tabContents = ['scorer', 'teams', 'stats', 'settings'].map(t => mkEl(t, 'div'));
 
+const body = new El('body');
+body.contains = () => true;
 global.document = {
+    body,
     getElementById: id => registry.get(id) || null,
     querySelectorAll: sel => {
         if (sel === '.nav-tab') return navTabs;
@@ -94,12 +99,18 @@ global.document = {
     querySelector: sel => {
         const m = sel.match(/\.nav-tab\[data-tab="(.+)"\]/);
         if (m) return navTabs.find(t => t.dataset.tab === m[1]) || null;
+        if (sel === '.toast-stack') return null;
         return null;
     },
     createElement: tag => new El(tag),
     addEventListener: (type, fn) => { if (type === 'DOMContentLoaded') global.__domReady = fn; }
 };
-global.window = { addEventListener() {}, scorer: null };
+// In a real browser window === globalThis, so the modules' `window.Hive` and our
+// `global.Hive` are the same object. Mirror that here instead of a separate window.
+globalThis.addEventListener = () => {};
+globalThis.scorer = null;
+global.window = globalThis;
+global.requestAnimationFrame = (fn) => fn();
 global.localStorage = (() => {
     const m = {};
     return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; } };
@@ -117,7 +128,7 @@ global.Hive = {};
 
 // ---- load scripts in index.html order ----------------------------------------
 [
-    'core/ChatUtils', 'core/PointSystem', 'core/GameState', 'core/ScoringEngine',
+    'core/ChatUtils', 'core/Toast', 'core/PosterExport', 'core/PointSystem', 'core/GameState', 'core/ScoringEngine',
     'parsers/GamemodeParser', 'parsers/SurvivalLastStandingParser',
     'parsers/BedWarsParser', 'parsers/SkyWarsParser', 'parsers/SurvivalGamesParser',
     'parsers/DeathRunParser', 'parsers/GravityParser', 'parsers/BlockDropParser',
@@ -161,6 +172,23 @@ catch (e) { check('tab switches OK', false, e.message); }
 // Stats render produced game-history (game completed on "Game OVER").
 app.switchTab('stats');
 check('game history rendered', /game-history-card/.test(document.getElementById('gameHistory').innerHTML) || app.state.gameHistory.length > 0);
+check('event standings rendered', /standings-team/.test(document.getElementById('eventStandings').innerHTML));
+check('player totals rendered', /player-total-chip/.test(document.getElementById('playerTotals').innerHTML));
+
+// Player detail modal opens with a known player.
+try {
+    app.openPlayerModal('SandRosey');
+    check('player modal opens', document.getElementById('playerModal').classList.contains('open') &&
+        /Per-Game Breakdown/.test(document.getElementById('playerModalBody').innerHTML));
+    app.closePlayerModal();
+} catch (e) { check('player modal opens', false, e.message); }
+
+// Aggregation helpers feed the PNG export.
+const standings = app.statsView.playerStandingsList();
+check('player standings list non-empty', standings.length > 0 && typeof standings[0].points === 'number');
+const teamStand = app.statsView.aggregateTeamStandings();
+check('team standings list non-empty', teamStand.length > 0 && Array.isArray(teamStand[0].players));
+check('toast + poster modules present', !!global.Hive.Toast && !!global.Hive.PosterExport);
 
 // JSON round-trip.
 const json = JSON.parse(JSON.stringify(app.state.serialize({ saveDate: 'x' })));

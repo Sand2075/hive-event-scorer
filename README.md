@@ -25,12 +25,21 @@ dedicated parser tuned to The Hive's real chat formats. Combat kills are detecte
 flavour kill verb ("rolled ... beyond space and time", "ten hearted", "silenced", ...) is handled
 automatically without a hard-coded list.
 
+### Statistics & exports
+The Statistics tab leads with **event standings** (team totals, each listing its players' totals) and a
+compact **all-players** list — click any player to open a modal with their full per-game breakdown and
+placements. Two buttons export shareable **PNG posters** (player standings and event winners), drawn on a
+canvas with no external libraries. Manual score edits are made per game via "Edit Scores" in Game History.
+
+Saving is explicit (Save/Load JSON) — there is no crash/emergency backup. Starting a new game rolls the
+previous one into history and shows a brief, dismissible reminder to save tournament progress.
+
 ### Project structure
 ```
 index.html            Single page; tabs switch client-side (no reload)
-css/                  Styles
+css/                  global.css (tokens/base) + app.css (components)
 js/
-  core/               ChatUtils, PointSystem, GameState, ScoringEngine
+  core/               ChatUtils, Toast, PosterExport, PointSystem, GameState, ScoringEngine
   parsers/            GamemodeParser (base) + one subclass per gamemode + registry
   renderers/          Scoreboard / Teams / Stats / Settings views
   app.js              Controller: wires the DOM to the engine and renderers

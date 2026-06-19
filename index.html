@@ -7,12 +7,10 @@
     <title>Hive Event Scorer - Main</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/global.css">
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="css/teams.css">
-    <link rel="stylesheet" href="css/stats.css">
-    <link rel="stylesheet" href="css/settings.css">
+    <link rel="stylesheet" href="css/app.css">
 </head>
 
 <body>
@@ -24,9 +22,9 @@
                     <p class="subtitle">Track player scores from chat text across all Hive gamemodes</p>
                     <p class="disclaimer">⚠️ Non-Profit Project - Not affiliated with The Hive</p>
                 </div>
-                <div class="action-buttons">
-                    <button type="button" id="saveBtn" class="btn btn-success btn-action">Save JSON</button>
-                    <button type="button" id="loadBtn" class="btn btn-primary btn-action">Load JSON</button>
+                <div class="header-actions">
+                    <button type="button" id="saveBtn" class="btn btn-success">Save JSON</button>
+                    <button type="button" id="loadBtn" class="btn btn-primary">Load JSON</button>
                     <input type="file" id="fileInput" accept=".json" class="hidden-input" aria-label="Upload JSON file">
                 </div>
             </div>
@@ -192,9 +190,35 @@
     <!-- Stats Tab -->
     <div id="stats" class="tab-content">
         <div class="stats-container">
+            <!-- Event standings: team totals + their players' totals -->
             <div class="section">
-                <h2 class="section-title">Current Game - Player Performance</h2>
-                <p class="help-text">Individual player statistics tracked during the current game</p>
+                <div class="section-header">
+                    <h2 class="section-title">Event Standings</h2>
+                    <div class="export-actions">
+                        <button type="button" id="exportWinnersPng" class="btn btn-primary">Export Winners PNG</button>
+                        <button type="button" id="exportPlayersPng" class="btn btn-info">Export Players PNG</button>
+                    </div>
+                </div>
+                <p class="help-text">Cumulative team scores across the whole event, with each team's player
+                    totals. Click any player for their full breakdown.</p>
+                <div id="eventStandings" class="event-standings">
+                    <p class="empty-state">No completed games yet.</p>
+                </div>
+            </div>
+
+            <!-- Compact all-players totals -->
+            <div class="section section-spacing">
+                <h2 class="section-title">All Players</h2>
+                <p class="help-text">Every player ranked by total points. Click a player to see all their games
+                    and placements.</p>
+                <div id="playerTotals" class="player-totals">
+                    <p class="empty-state">No player totals yet.</p>
+                </div>
+            </div>
+
+            <!-- Current in-progress game -->
+            <div class="section section-spacing">
+                <h2 class="section-title">Current Game — Player Performance</h2>
                 <div class="player-performance-toolbar">
                     <label for="playerStatsSort">Sort by:</label>
                     <select id="playerStatsSort">
@@ -221,17 +245,9 @@
             </div>
 
             <div class="section section-spacing">
-                <h2 class="section-title">Overall Player Leaderboard</h2>
-                <p class="help-text">Cumulative points per player across all completed games. Click a
-                    per-gamemode score to edit it - player and team totals stay in sync.</p>
-                <div id="overallStats">
-                    <p class="empty-state">No games played yet!</p>
-                </div>
-            </div>
-
-            <div class="section section-spacing">
                 <h2 class="section-title">Game History</h2>
-                <p class="help-text">All completed games with scores and player performance</p>
+                <p class="help-text">All completed games with scores and player performance. Use "Edit Scores"
+                    to manually adjust a team's total for a game.</p>
                 <div id="gameHistory">
                     <p class="empty-state">No completed games yet!</p>
                 </div>
@@ -239,16 +255,14 @@
         </div>
     </div>
 
-    <div id="gameHistoryModal" class="game-history-modal" aria-hidden="true">
-        <div class="game-history-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="gameHistoryModalTitle">
-            <div class="game-history-modal-header">
-                <h2 id="gameHistoryModalTitle">Game History</h2>
-                <button type="button" class="game-history-modal-close" data-action="close-game-history-modal"
-                    aria-label="Close dialog">×</button>
+    <!-- Player detail modal -->
+    <div id="playerModal" class="modal" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+            <div class="modal-header">
+                <h2 id="playerModalTitle">Player</h2>
+                <button type="button" id="playerModalClose" class="modal-close" aria-label="Close dialog">×</button>
             </div>
-            <div id="gameHistoryModalBody" class="game-history-modal-body">
-                <p class="empty-state">Select a completed game to view its details.</p>
-            </div>
+            <div id="playerModalBody" class="modal-body"></div>
         </div>
     </div>
 
@@ -351,6 +365,8 @@
 
     <!-- Core (load order matters: utilities -> state -> engine) -->
     <script src="js/core/ChatUtils.js"></script>
+    <script src="js/core/Toast.js"></script>
+    <script src="js/core/PosterExport.js"></script>
     <script src="js/core/PointSystem.js"></script>
     <script src="js/core/GameState.js"></script>
     <script src="js/core/ScoringEngine.js"></script>

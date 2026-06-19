@@ -2,7 +2,7 @@
  * HiveEventScorer (controller) - wires the DOM to the state/engine/parsers/renderers.
  *
  * Owns: tab switching (no reload), event listeners, chat processing, team
- * management, undo/redo, JSON save/load, settings actions, emergency autosave.
+ * management, undo/redo, JSON save/load, settings actions, PNG poster export.
  * All scoring rules live in the parsers/engine; all rendering lives in the
  * renderers. This class is the glue.
  */
@@ -32,21 +32,14 @@
             // Live activity-log updates as events are recorded during processing.
             this.state.onLog = () => this.scoreboard.renderActivityLog();
 
-            this.loadEmergencySave();
             this.updateGamemodeDropdowns();
             this.setupEventListeners();
             this.applySavedGamemodeSelection();
             this.syncGamemodeFromSelection();
             this.updateUI();
-
-            window.addEventListener('beforeunload', (e) => {
-                this.emergencySave();
-                if (this.state.hasDataToSave()) {
-                    const msg = 'You have unsaved data. Download a JSON backup before leaving?';
-                    e.preventDefault(); e.returnValue = msg; return msg;
-                }
-            });
-            setInterval(() => { if (this.state.hasDataToSave()) this.emergencySave(); }, 30000);
+            // No crash/emergency backup and no beforeunload prompt: we rely on the
+            // explicit Save/Load JSON system. The host is gently reminded to save
+            // (via a toast) when they start a new game — see startNewGame().
         }
 
         // ================= event wiring =================
@@ -90,6 +83,16 @@
 
             const gh = document.getElementById('gameHistory');
             if (gh) gh.addEventListener('click', e => this.handleGameHistoryActions(e));
+
+            // PNG poster exports
+            this.on('exportPlayersPng', 'click', () => this.exportPlayerStandingsPNG());
+            this.on('exportWinnersPng', 'click', () => this.exportEventWinnersPNG());
+
+            // Player-detail modal close (button + backdrop click)
+            this.on('playerModalClose', 'click', () => this.closePlayerModal());
+            const modal = document.getElementById('playerModal');
+            if (modal) modal.addEventListener('click', e => { if (e.target === modal) this.closePlayerModal(); });
+            document.addEventListener('keydown', e => { if (e.key === 'Escape') this.closePlayerModal(); });
 
             this.setupTeamManagement();
             this.setupSettingsManagement();
@@ -149,16 +152,22 @@
         // ================= game flow =================
         startNewGame() {
             if (!this.state.gamemode) { alert('Please select a gamemode first!'); return; }
-            if (this.state.currentGame && this.state.hasActiveScores()) {
-                if (confirm('Start a new game? Current game will be saved to history.')) {
-                    this.saveGameToHistory();
-                } else { return; }
-            }
+
+            // Roll the previous game into history (no blocking prompt), then nudge
+            // the host to save tournament progress with a dismissible toast.
+            const hadGame = this.state.currentGame && this.state.hasActiveScores();
+            if (hadGame) this.saveGameToHistory();
+
             this.state.pushUndo('startNewGame');
             this.state.startNewGame(this.state.gamemode);
             this.state.syncToStorage();
             this.state.addLog(`Started new ${this.state.gamemode} game`, 'info');
             this.updateUI();
+
+            if (hadGame) {
+                H.Toast.show('Previous game saved to history. Remember to Save JSON to keep tournament progress.',
+                    { title: 'New game started', type: 'warning', duration: 6000 });
+            }
         }
 
         processChat(lastLineOnly) {
@@ -316,32 +325,55 @@
             this.state.addLog(`Updated saved scores for ${this.state.gameHistory[idx].gamemode}`, 'success');
         }
 
-        /**
-         * Inline overall-leaderboard edit: a per-gamemode player score was changed.
-         * Apply the delta to that player's team score in every matching game so the
-         * player total and the team total stay in sync.
-         */
-        savePlayerGamemodeScore(e) {
-            const el = e.target;
-            const player = el.dataset.player;
-            const gamemode = el.dataset.gamemode;
-            const original = parseInt(el.dataset.original, 10);
-            const next = parseInt(el.textContent.trim(), 10);
-            if (isNaN(next) || next < 0) { el.textContent = original; return; }
-            if (next === original) return;
+        // ================= player detail modal =================
+        openPlayerModal(name) {
+            const d = this.statsView.playerDetail(name);
+            const titleEl = document.getElementById('playerModalTitle');
+            const bodyEl = document.getElementById('playerModalBody');
+            if (!titleEl || !bodyEl) return;
+            const esc = s => this.statsView.escapeHtml(s);
 
-            const delta = next - original;
-            for (const game of this.state.gameHistory) {
-                if (game.gamemode !== gamemode) continue;
-                const team = this.state.findPlayerTeam(player);
-                if (!team || !game.scores[team]) continue;
-                if (!game.playerStats[player]) continue;
-                game.scores[team].score = Math.max(0, game.scores[team].score + delta);
-            }
-            el.dataset.original = String(next);
-            this.state.syncToStorage();
-            this.state.addLog(`Updated ${player}'s ${gamemode} score to ${next}`, 'success');
-            this.statsView.renderAll();
+            titleEl.textContent = d.name + (d.team ? `  (${d.team})` : '');
+
+            const metric = (v, l) => `<div class="pd-metric"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+            const summary = `<div class="pd-summary">
+                ${metric(d.totalPoints, 'Total Points')}
+                ${metric(d.games.length, 'Games')}
+                ${metric(d.wins, '1st Places')}
+                ${metric(d.totalKills, 'Kills')}
+            </div>`;
+
+            const games = d.games.length ? d.games.map(g => `
+                <div class="pd-game">
+                    <div class="pd-game-head"><span>${esc(g.gamemode)}</span><span>${g.points} pts</span></div>
+                    <div class="pd-game-stats">
+                        <span>Placement: ${esc(g.placement)}</span>
+                        ${g.features.kills ? `<span>K: ${g.kills}</span><span>D: ${g.deaths}</span><span>FK: ${g.finalKills}</span>` : ''}
+                        ${g.features.bedBreaks && g.bedBreaks > 0 ? `<span>Beds: ${g.bedBreaks}</span>` : ''}
+                        <span class="pd-date">${new Date(g.date).toLocaleString()}</span>
+                    </div>
+                </div>`).join('') : '<p class="empty-state">No completed games for this player yet.</p>';
+
+            bodyEl.innerHTML = summary + '<h3 style="margin:8px 0 10px;">Per-Game Breakdown</h3>' + games;
+            document.getElementById('playerModal').classList.add('open');
+        }
+
+        closePlayerModal() {
+            const m = document.getElementById('playerModal');
+            if (m) m.classList.remove('open');
+        }
+
+        // ================= PNG poster export =================
+        exportPlayerStandingsPNG() {
+            const players = this.statsView.playerStandingsList();
+            H.PosterExport.playerStandings(players, 'Event Standings');
+            this.state.addLog('Exported player standings PNG', 'success');
+        }
+
+        exportEventWinnersPNG() {
+            const teams = this.statsView.aggregateTeamStandings();
+            H.PosterExport.eventWinners(teams, 'Event Champions');
+            this.state.addLog('Exported event winners PNG', 'success');
         }
 
         // ================= settings =================
@@ -437,33 +469,6 @@
             const a = document.createElement('a');
             a.href = url; a.download = filename; a.click();
             URL.revokeObjectURL(url);
-        }
-
-        // ================= emergency autosave =================
-        emergencySave() {
-            try {
-                if (typeof localStorage === 'undefined') return;
-                localStorage.setItem('hive_emergency_backup', JSON.stringify(this.state.serialize({ timestamp: new Date().toISOString() })));
-            } catch (err) { console.error('Emergency save failed:', err); }
-        }
-
-        loadEmergencySave() {
-            try {
-                if (typeof localStorage === 'undefined') return;
-                const saved = localStorage.getItem('hive_emergency_backup');
-                if (!saved) return;
-                const data = JSON.parse(saved);
-                const hours = (Date.now() - new Date(data.timestamp).getTime()) / 3.6e6;
-                const hasData = (data.playerStats && Object.keys(data.playerStats).length) ||
-                    (data.scores && Object.keys(data.scores).length) ||
-                    (data.gameHistory && data.gameHistory.length);
-                if (hours < 24 && hasData &&
-                    confirm(`Found an emergency backup from ${new Date(data.timestamp).toLocaleString()}. Restore it?`)) {
-                    this.state.applyData(data, { includeTeams: true });
-                    this.state.addLog('Emergency backup restored', 'success');
-                    alert('Your data has been recovered from the emergency backup!');
-                }
-            } catch (err) { console.error('Error loading emergency save:', err); }
         }
 
         // ================= gamemode dropdowns =================

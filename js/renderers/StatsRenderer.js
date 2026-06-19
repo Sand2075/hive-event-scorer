@@ -1,12 +1,20 @@
 /**
- * StatsRenderer - the Statistics tab: current-game player performance, the point
- * record, completed game history (with inline score editing), and the overall
- * player leaderboard (with inline per-gamemode score editing).
+ * StatsRenderer - the Statistics tab, redesigned for readability.
+ *
+ * Layout (top -> bottom):
+ *   1. Event standings  - team blocks ranked by total points, each listing its
+ *      players' totals. Click a player to open a detail modal.
+ *   2. All players      - compact "chips" of every player's total, click-through.
+ *   3. Current game      - per-player performance for the in-progress game.
+ *   4. Point record      - current-game events per team.
+ *   5. Game history      - completed games (with inline score editing).
+ *
+ * Aggregation helpers (aggregatePlayerScores / aggregateTeamStandings /
+ * playerDetail) are shared by the UI, the player modal, and the PNG poster export.
  */
 (function (global) {
     'use strict';
     const Base = global.Hive.renderers.Renderer;
-    const ChatUtils = global.Hive.ChatUtils;
 
     class StatsRenderer extends Base {
         constructor(app) {
@@ -15,13 +23,172 @@
         }
 
         renderAll() {
+            this.renderEventStandings();
+            this.renderPlayerTotals();
             this.renderPlayerStats();
             this.renderPointRecord();
             this.renderGameHistory();
-            this.renderOverallStats();
         }
 
-        // ---- current-game player performance -----------------------------
+        teamColor(teamName) { return this.state.teams[teamName]?.color || '#7C3AED'; }
+
+        // ================= aggregation (shared) =================
+
+        /**
+         * Per-player totals across all completed games. Team scores are split among
+         * the players on that team who appear in the game; the remainder goes to the
+         * highest-contributing players so player sums reconcile with team totals.
+         * Returns { [player]: { totalPoints, byGamemode: {mode: pts} } }.
+         */
+        aggregatePlayerScores() {
+            const result = {};
+            for (const game of this.state.gameHistory) {
+                for (const [teamName, teamScore] of Object.entries(game.scores)) {
+                    const team = this.state.teams[teamName];
+                    if (!team || !team.players) continue;
+                    const players = team.players.filter(p => game.playerStats[p]);
+                    if (players.length === 0) continue;
+
+                    const base = Math.floor(teamScore.score / players.length);
+                    let remainder = teamScore.score - base * players.length;
+                    const ranked = players.slice().sort((a, b) =>
+                        this.engine.gamePlayerContribution(game, b, game.playerStats[b]) -
+                        this.engine.gamePlayerContribution(game, a, game.playerStats[a]));
+
+                    for (const name of ranked) {
+                        let pts = base;
+                        if (remainder > 0) { pts += 1; remainder--; }
+                        if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
+                        result[name].totalPoints += pts;
+                        result[name].byGamemode[game.gamemode] = (result[name].byGamemode[game.gamemode] || 0) + pts;
+                    }
+                }
+            }
+            return result;
+        }
+
+        /**
+         * Team standings for the whole event: each team's cumulative points (sum of
+         * its games) plus its players' totals. Returns an array sorted desc by points.
+         */
+        aggregateTeamStandings() {
+            const playerScores = this.aggregatePlayerScores();
+            const teams = {};
+            for (const game of this.state.gameHistory) {
+                for (const [teamName, teamScore] of Object.entries(game.scores)) {
+                    if (!this.state.teams[teamName]) continue;
+                    teams[teamName] = (teams[teamName] || 0) + teamScore.score;
+                }
+            }
+            return Object.entries(teams).map(([teamName, points]) => {
+                const roster = this.state.teams[teamName]?.players || [];
+                const players = roster
+                    .map(name => ({ name, points: playerScores[name] ? playerScores[name].totalPoints : 0 }))
+                    .sort((a, b) => b.points - a.points);
+                return { team: teamName, teamColor: this.teamColor(teamName), points, players };
+            }).sort((a, b) => b.points - a.points);
+        }
+
+        /** Flat, ranked list of every registered player's total (for chips + PNG). */
+        playerStandingsList() {
+            const scores = this.aggregatePlayerScores();
+            return Object.entries(scores)
+                .filter(([name]) => this.state.findPlayerTeam(name))
+                .map(([name, data]) => {
+                    const team = this.state.findPlayerTeam(name);
+                    return { name, team, teamColor: this.teamColor(team), points: data.totalPoints, byGamemode: data.byGamemode };
+                })
+                .sort((a, b) => b.points - a.points);
+        }
+
+        /** Everything needed for the player-detail modal, including per-game placements. */
+        playerDetail(name) {
+            const team = this.state.findPlayerTeam(name);
+            const games = [];
+            let totalPoints = 0, totalKills = 0, totalFinalKills = 0, totalBedBreaks = 0, wins = 0;
+
+            for (const game of this.state.gameHistory) {
+                const ps = game.playerStats[name];
+                if (!ps) continue;
+                const pts = this.engine.gamePlayerContribution(game, name, ps);
+                totalPoints += pts;
+                totalKills += ps.kills || 0;
+                totalFinalKills += ps.finalKills || 0;
+                totalBedBreaks += ps.bedBreaks || 0;
+                if (ps.placement === '1st') wins++;
+                games.push({
+                    gamemode: game.gamemode,
+                    date: game.startTime,
+                    points: pts,
+                    placement: ps.placement || '-',
+                    kills: ps.kills || 0,
+                    deaths: ps.deaths || 0,
+                    finalKills: ps.finalKills || 0,
+                    bedBreaks: ps.bedBreaks || 0,
+                    features: this.points.featuresFor(game.gamemode) || {}
+                });
+            }
+            games.sort((a, b) => new Date(b.date) - new Date(a.date));
+            return { name, team, teamColor: this.teamColor(team), totalPoints, totalKills, totalFinalKills, totalBedBreaks, wins, games };
+        }
+
+        // ================= event standings =================
+        renderEventStandings() {
+            const host = this.$('eventStandings');
+            if (!host) return;
+            if (this.state.gameHistory.length === 0) {
+                host.innerHTML = '<p class="empty-state">No completed games yet. Finish a game to build the event standings.</p>';
+                return;
+            }
+            const standings = this.aggregateTeamStandings();
+            if (standings.length === 0) {
+                host.innerHTML = '<p class="empty-state">No team data yet.</p>';
+                return;
+            }
+            host.innerHTML = standings.map((t, i) => `
+                <div class="standings-team" style="--team-color:${t.teamColor}">
+                    <div class="standings-team-head">
+                        <span class="standings-rank">${i === 0 ? '★ 1st' : '#' + (i + 1)}</span>
+                        <span class="standings-team-name">${this.escapeHtml(t.team)}</span>
+                        <span class="standings-team-total">${t.points} pts</span>
+                    </div>
+                    <div class="standings-players">
+                        ${t.players.map(p => `
+                            <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
+                                <span class="pname">${this.escapeHtml(p.name)}</span>
+                                <span class="ppts">${p.points}</span>
+                            </div>`).join('')}
+                    </div>
+                </div>`).join('');
+
+            this.attachPlayerClicks(host);
+        }
+
+        // ================= compact all-players list =================
+        renderPlayerTotals() {
+            const host = this.$('playerTotals');
+            if (!host) return;
+            const list = this.playerStandingsList();
+            if (list.length === 0) {
+                host.innerHTML = '<p class="empty-state">No player totals yet.</p>';
+                return;
+            }
+            host.innerHTML = list.map((p, i) => `
+                <div class="player-total-chip" data-player="${this.escapeHtml(p.name)}" style="--team-color:${p.teamColor}">
+                    <span class="ptc-rank">#${i + 1}</span>
+                    <span class="ptc-name">${this.escapeHtml(p.name)}</span>
+                    <span class="ptc-pts">${p.points}</span>
+                </div>`).join('');
+            this.attachPlayerClicks(host);
+        }
+
+        attachPlayerClicks(host) {
+            host.querySelectorAll('[data-player]').forEach(el => {
+                el.addEventListener('click', () => this.app.openPlayerModal(el.dataset.player));
+            });
+        }
+
+        // ================= current-game player performance =================
         renderPlayerStats() {
             const host = this.$('playerStats');
             if (!host) return;
@@ -37,25 +204,22 @@
                 host.innerHTML = '<p class="empty-state">No player data yet! Process some chat to see stats.</p>';
                 return;
             }
-
             rows.sort((a, b) => this.compareRows(a, b));
 
             host.innerHTML = '<div class="player-stats-grid">' + rows.map(({ name, data, contribution }) => {
-                const color = this.state.teams[data.team]?.color || '#888';
+                const color = this.teamColor(data.team);
                 return `
                     <div class="player-stat-card ${data.eliminated ? 'eliminated' : ''}" style="border-left: 4px solid ${color}">
                         <h3>${this.escapeHtml(name)}</h3>
                         <div class="stat-badge" style="background: ${color}">${this.escapeHtml(data.team)}</div>
                         <div class="stat-row highlight"><span>Points:</span><span>${contribution}</span></div>
                         <div class="stat-row"><span>Status:</span><span>${data.eliminated ? 'Eliminated' : 'Active'}</span></div>
+                        ${data.placement ? `<div class="stat-row highlight"><span>Placement:</span><span>${data.placement}</span></div>` : ''}
                         ${showCombat ? `
                         <div class="stat-row"><span>Kills:</span><span>${data.kills}</span></div>
                         <div class="stat-row"><span>Deaths:</span><span>${data.deaths}</span></div>
                         <div class="stat-row"><span>Final Kills:</span><span>${data.finalKills}</span></div>` : ''}
-                        ${showBeds && data.bedBreaks > 0 ? `
-                        <div class="stat-row"><span>Bed Breaks:</span><span>${data.bedBreaks}</span></div>` : ''}
-                        ${data.placement ? `
-                        <div class="stat-row highlight"><span>Placement:</span><span>${data.placement}</span></div>` : ''}
+                        ${showBeds && data.bedBreaks > 0 ? `<div class="stat-row"><span>Bed Breaks:</span><span>${data.bedBreaks}</span></div>` : ''}
                     </div>`;
             }).join('') + '</div>';
         }
@@ -75,7 +239,7 @@
             }
         }
 
-        // ---- point record (current game events) --------------------------
+        // ================= point record =================
         renderPointRecord() {
             const host = this.$('pointRecord');
             if (!host) return;
@@ -85,7 +249,7 @@
             }
             const sorted = Object.entries(this.state.scores).sort((a, b) => b[1].score - a[1].score);
             host.innerHTML = sorted.map(([teamName, data]) => {
-                const color = this.state.teams[teamName]?.color || '#888';
+                const color = this.teamColor(teamName);
                 const events = (data.events || []).slice().reverse().slice(0, 12);
                 const eventHtml = events.length
                     ? events.map(e => `<li>${this.escapeHtml(e.type)} <span class="pr-pts">+${e.points}</span></li>`).join('')
@@ -98,7 +262,7 @@
             }).join('');
         }
 
-        // ---- completed game history --------------------------------------
+        // ================= game history =================
         renderGameHistory() {
             const host = this.$('gameHistory');
             if (!host) return;
@@ -106,8 +270,7 @@
                 host.innerHTML = '<p class="empty-state">No completed games yet! Start a new game after playing to save it to history.</p>';
                 return;
             }
-            const games = [...this.state.gameHistory].reverse();
-            host.innerHTML = games.map(game => this.renderGameCard(game)).join('');
+            host.innerHTML = [...this.state.gameHistory].reverse().map(g => this.renderGameCard(g)).join('');
         }
 
         renderGameCard(game) {
@@ -144,7 +307,7 @@
                             </div>
                             ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
                             ${teams.map(([teamName, data], i) => {
-                                const color = this.state.teams[teamName]?.color || '#888';
+                                const color = this.teamColor(teamName);
                                 return `
                                     <div class="score-row" style="border-left: 3px solid ${color}">
                                         <span class="rank">#${i + 1}</span>
@@ -159,7 +322,7 @@
                             <h4>Player Performance</h4>
                             <div class="player-stats-grid">
                                 ${Object.entries(game.playerStats).map(([name, data]) => {
-                                    const color = this.state.teams[data.team]?.color || '#888';
+                                    const color = this.teamColor(data.team);
                                     const c = this.engine.gamePlayerContribution(game, name, data);
                                     return `
                                         <div class="player-stat-card mini" style="border-left: 4px solid ${color}">
@@ -167,9 +330,9 @@
                                             <div class="stat-badge" style="background: ${color}">${this.escapeHtml(data.team)}</div>
                                             <div class="mini-stats">
                                                 <span>Pts: ${c}</span>
+                                                ${data.placement ? `<span>Pl: ${data.placement}</span>` : ''}
                                                 ${showCombat ? `<span>K: ${data.kills}</span><span>D: ${data.deaths}</span><span>FK: ${data.finalKills}</span>` : ''}
                                                 ${showBeds && data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
-                                                ${data.placement ? `<span>Pl: ${data.placement}</span>` : ''}
                                             </div>
                                         </div>`;
                                 }).join('')}
@@ -177,91 +340,6 @@
                         </div>
                     </details>
                 </div>`;
-        }
-
-        // ---- overall leaderboard -----------------------------------------
-        renderOverallStats() {
-            const host = this.$('overallStats');
-            if (!host) return;
-            if (this.state.gameHistory.length === 0) {
-                host.innerHTML = '<p class="empty-state">No games played yet!</p>';
-                return;
-            }
-            const scores = this.aggregatePlayerScores();
-            const registered = Object.entries(scores).filter(([name]) => this.state.findPlayerTeam(name));
-            if (registered.length === 0) {
-                host.innerHTML = '<p class="empty-state">No registered player data yet!</p>';
-                return;
-            }
-            const sorted = registered.sort((a, b) => b[1].totalPoints - a[1].totalPoints);
-
-            host.innerHTML = `
-                <div class="tutorial-tip"><strong>Tip:</strong> Click a per-gamemode score below to edit it. Press Enter or click away to save. Player and team totals stay in sync.</div>
-                <div class="overall-summary">
-                    <div class="summary-card"><div class="summary-value">${this.state.gameHistory.length}</div><div class="summary-label">Total Games</div></div>
-                    <div class="summary-card"><div class="summary-value">${sorted.length}</div><div class="summary-label">Registered Players</div></div>
-                </div>
-                <div class="player-leaderboard">
-                    <h3>Player Leaderboard (Total Points)</h3>
-                    ${sorted.map(([name, data], i) => {
-                        const teamName = this.state.findPlayerTeam(name);
-                        const color = this.state.teams[teamName]?.color || '#888';
-                        const breakdown = Object.entries(data.byGamemode).map(([mode, pts]) =>
-                            `<span class="gamemode-score" data-player="${this.escapeHtml(name)}" data-gamemode="${this.escapeHtml(mode)}" contenteditable="true" data-original="${pts}">${pts}</span> <span class="gamemode-label">${this.escapeHtml(mode)}</span>`).join(', ');
-                        return `
-                            <div class="player-leaderboard-card" style="border-left: 4px solid ${color}">
-                                <div class="leaderboard-rank">#${i + 1}</div>
-                                <div class="leaderboard-player-info">
-                                    <h3>${this.escapeHtml(name)}</h3>
-                                    <div class="stat-badge" style="background: ${color}">${this.escapeHtml(teamName)}</div>
-                                </div>
-                                <div class="leaderboard-total">${data.totalPoints} pts</div>
-                                <div class="leaderboard-breakdowns">${breakdown || '<em>No scores yet</em>'}</div>
-                            </div>`;
-                    }).join('')}
-                </div>`;
-
-            host.querySelectorAll('.gamemode-score').forEach(el => {
-                el.addEventListener('blur', e => this.app.savePlayerGamemodeScore(e));
-                el.addEventListener('keypress', e => {
-                    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-                });
-            });
-        }
-
-        /**
-         * Aggregate each player's points across all completed games. Team scores are
-         * split among the players on that team who appear in the game. The previous
-         * version used Math.floor and silently dropped the remainder, so player sums
-         * never reconciled with team totals; we now give the remainder to the
-         * highest-contributing player so per-player sums equal the team score.
-         */
-        aggregatePlayerScores() {
-            const result = {};
-            for (const game of this.state.gameHistory) {
-                for (const [teamName, teamScore] of Object.entries(game.scores)) {
-                    const team = this.state.teams[teamName];
-                    if (!team || !team.players) continue;
-                    const players = team.players.filter(p => game.playerStats[p]);
-                    if (players.length === 0) continue;
-
-                    const base = Math.floor(teamScore.score / players.length);
-                    let remainder = teamScore.score - base * players.length;
-                    // Distribute remainder to the players with the highest contribution first.
-                    const ranked = players.slice().sort((a, b) =>
-                        this.engine.gamePlayerContribution(game, b, game.playerStats[b]) -
-                        this.engine.gamePlayerContribution(game, a, game.playerStats[a]));
-
-                    for (const name of ranked) {
-                        let pts = base;
-                        if (remainder > 0) { pts += 1; remainder--; }
-                        if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
-                        result[name].totalPoints += pts;
-                        result[name].byGamemode[game.gamemode] = (result[name].byGamemode[game.gamemode] || 0) + pts;
-                    }
-                }
-            }
-            return result;
         }
     }
 
