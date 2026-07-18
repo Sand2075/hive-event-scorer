@@ -170,5 +170,6 @@
     "individualFinish": "§a§l» [PLAYER] has finished in [N]th place"
   },
   "myIgn": "Qv19v",
+  "blockPartyTieMode": "shared-placement",
   "autoAddUnknownPlayers": true
 }

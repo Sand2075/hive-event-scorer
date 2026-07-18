@@ -201,34 +201,82 @@
             const assigned = new Set();
             const finalPositions = [];
 
-            const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
+            const order = this.state.playerEliminationOrder
+                .filter(n => this.isScorablePlayer(n));
 
+            const survivors = players
+                .filter(n => !order.includes(n))
+                .sort((a, b) => a.localeCompare(b));
+
+            const isBlockPartyTie =
+                this.state.gamemode === 'Block Party' &&
+                survivors.length > 1;
+
+            const tieMode = this.points.blockPartyTieMode || 'shared-first';
+
+            // Record eliminated players.
             for (let i = 0; i < order.length; i++) {
                 const name = order[i];
                 const team = this.state.findPlayerTeam(name);
-                const pos = totalPlayers - i;
+
+                let pos;
+
+                if (isBlockPartyTie && tieMode === 'shared-first') {
+                    // Example with 3 tied survivors:
+                    // last eliminated = 2nd, then 3rd, then 4th...
+                    pos = order.length - i + 1;
+                } else {
+                    // Normal placement logic.
+                    // Also used for shared-placement ties.
+                    pos = totalPlayers - i;
+                }
 
                 this.recordPlayerPlacement(team, name, pos);
-                finalPositions.push({ player: name, team, position: pos });
+
+                finalPositions.push({
+                    player: name,
+                    team,
+                    position: pos
+                });
+
                 assigned.add(name);
             }
 
-            // Survivors take the remaining best positions.
-            const survivors = players
-                .filter(n => !assigned.has(n))
-                .sort((a, b) => a.localeCompare(b));
+            // Record surviving players.
+            if (isBlockPartyTie) {
+                const tiedPosition =
+                    tieMode === 'shared-placement'
+                        ? survivors.length
+                        : 1;
 
-            for (let i = 0; i < survivors.length; i++) {
-                const name = survivors[i];
-                const team = this.state.findPlayerTeam(name);
-                const pos = survivors.length - i;
+                for (const name of survivors) {
+                    const team = this.state.findPlayerTeam(name);
 
-                this.recordPlayerPlacement(team, name, pos);
-                finalPositions.push({ player: name, team, position: pos });
+                    this.recordPlayerPlacement(team, name, tiedPosition);
+
+                    finalPositions.push({
+                        player: name,
+                        team,
+                        position: tiedPosition
+                    });
+                }
+            } else {
+                for (let i = 0; i < survivors.length; i++) {
+                    const name = survivors[i];
+                    const team = this.state.findPlayerTeam(name);
+                    const pos = survivors.length - i;
+
+                    this.recordPlayerPlacement(team, name, pos);
+
+                    finalPositions.push({
+                        player: name,
+                        team,
+                        position: pos
+                    });
+                }
             }
 
             // Rank teams by their best-finishing player.
-            // Lowest player placement number = team survived the longest.
             const bestPlacementByTeam = {};
 
             for (const result of finalPositions) {

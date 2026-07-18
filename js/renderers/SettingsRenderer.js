@@ -22,12 +22,43 @@
                 host.innerHTML = '<p class="empty-state">Invalid gamemode selected</p>';
                 return;
             }
-            host.innerHTML = `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
+            host.innerHTML =
+                `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
+
                 Object.entries(table).map(([action, value]) => `
                     <div class="point-item">
                         <label>${this.escapeHtml(action)}</label>
-                        <input type="number" data-action="${this.escapeHtml(action)}" value="${value}" min="0" max="100">
-                    </div>`).join('');
+                        <input
+                            type="number"
+                            data-action="${this.escapeHtml(action)}"
+                            value="${value}"
+                            min="0"
+                            max="100"
+                        >
+                    </div>
+                `).join('') +
+
+                (mode === 'Block Party' ? `
+                    <div class="point-item">
+                        <label>Block Party Tie Handling</label>
+
+                        <select id="blockPartyTieMode">
+                            <option
+                                value="shared-first"
+                                ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}
+                            >
+                                Multiple 1st Places
+                            </option>
+
+                            <option
+                                value="shared-placement"
+                                ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}
+                            >
+                                Shared Next Placement
+                            </option>
+                        </select>
+                    </div>
+                ` : '');
         }
 
         renderPatterns() {
@@ -74,6 +105,12 @@
             if (ign) this.points.myIgn = ign.value.trim();
             const autoAdd = this.$('autoAddUnknownPlayers');
             if (autoAdd) this.points.autoAddUnknownPlayers = autoAdd.checked;
+
+            const blockPartyTieMode = this.$('blockPartyTieMode');
+
+            if (blockPartyTieMode) {
+                this.points.blockPartyTieMode = blockPartyTieMode.value;
+            }
         }
 
         renderAll() {

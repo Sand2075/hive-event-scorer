@@ -160,6 +160,7 @@
             // When a player appears in the logs but isn't on any team, add them to an
             // "UNKNOWN" team so their events still score. Toggleable in Settings.
             this.autoAddUnknownPlayers = true;
+            this.blockPartyTieMode = 'shared-first';
             this.STORAGE_KEY = 'hive_settings';
         }
 
@@ -175,6 +176,9 @@
                 const settings = JSON.parse(raw);
                 if (settings.pointSystems) this.pointSystems = settings.pointSystems;
                 this.gamemodeFeatures = PointSystem._mergeFeatures(settings.gamemodeFeatures);
+                if (typeof settings.blockPartyTieMode === 'string') {
+                    this.blockPartyTieMode = settings.blockPartyTieMode;
+                }
                 if (settings.detectionPatterns) this.detectionPatterns = settings.detectionPatterns;
                 if (typeof settings.myIgn === 'string') this.myIgn = settings.myIgn;
                 if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
@@ -190,7 +194,8 @@
                 gamemodeFeatures: this.gamemodeFeatures,
                 detectionPatterns: this.detectionPatterns,
                 myIgn: this.myIgn,
-                autoAddUnknownPlayers: this.autoAddUnknownPlayers
+                autoAddUnknownPlayers: this.autoAddUnknownPlayers,
+                blockPartyTieMode: this.blockPartyTieMode
             };
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
@@ -203,6 +208,7 @@
             this.gamemodeFeatures = defaultFeatures();
             this.detectionPatterns = defaultDetectionPatterns();
             this.autoAddUnknownPlayers = true;
+            this.blockPartyTieMode = 'shared-first';
             this.save();
         }
 
@@ -211,6 +217,9 @@
             this.gamemodeFeatures = PointSystem._mergeFeatures(settings.gamemodeFeatures);
             if (settings.detectionPatterns) this.detectionPatterns = settings.detectionPatterns;
             if (typeof settings.myIgn === 'string') this.myIgn = settings.myIgn;
+            if (typeof settings.blockPartyTieMode === 'string') {
+                this.blockPartyTieMode = settings.blockPartyTieMode;
+            }
             if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
             this.save();
         }
@@ -231,6 +240,7 @@
                 gamemodeFeatures: this.gamemodeFeatures,
                 detectionPatterns: this.detectionPatterns,
                 myIgn: this.myIgn,
+                blockPartyTieMode: this.blockPartyTieMode,
                 autoAddUnknownPlayers: this.autoAddUnknownPlayers
             };
         }
