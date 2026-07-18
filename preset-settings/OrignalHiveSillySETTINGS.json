@@ -1,0 +1,174 @@
+{
+  "pointSystems": {
+    "DeathRun": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "4th place": 1,
+      "5th place": 1,
+      "6th place": 0,
+      "7th place": 0,
+      "8th place": 0,
+      "9th place": 0,
+      "10th place": 0,
+      "11th place": 0,
+      "12th place": 0,
+      "13th place": 0,
+      "14th place": 0,
+      "15th place": 0,
+      "First full team finish": 1,
+      "Second full team finish": 0,
+      "Third full team finish": 0
+    },
+    "SkyWars": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "Kill": 1,
+      "Kill Leader": 0,
+      "First Blood": 0
+    },
+    "Survival Games": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "Kill": 1,
+      "First Blood": 0
+    },
+    "BedWars": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "Kill": 1,
+      "Bed Break": 1,
+      "First Blood": 0
+    },
+    "Gravity": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "4th place": 1,
+      "5th place": 1,
+      "6th place": 0,
+      "7th place": 0,
+      "8th place": 0,
+      "9th place": 0,
+      "10th place": 0,
+      "11th place": 0,
+      "12th place": 0,
+      "13th place": 0,
+      "14th place": 0,
+      "15th place": 0,
+      "First full team finish": 1,
+      "Second full team finish": 0,
+      "Third full team finish": 0
+    },
+    "BlockDrop": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "4th place": 1,
+      "5th place": 1,
+      "6th place": 0,
+      "7th place": 0,
+      "8th place": 0,
+      "9th place": 0,
+      "10th place": 0,
+      "11th place": 0,
+      "12th place": 0,
+      "13th place": 0,
+      "14th place": 0,
+      "15th place": 0,
+      "Last team standing": 1,
+      "Second last team standing": 0,
+      "Third last team standing": 0
+    },
+    "Block Party": {
+      "1st place": 4,
+      "2nd place": 3,
+      "3rd place": 2,
+      "4th place": 1,
+      "5th place": 1,
+      "6th place": 0,
+      "7th place": 0,
+      "8th place": 0,
+      "9th place": 0,
+      "10th place": 0,
+      "11th place": 0,
+      "12th place": 0,
+      "13th place": 0,
+      "14th place": 0,
+      "15th place": 0,
+      "Last team standing": 1,
+      "Second last team standing": 0,
+      "Third last team standing": 0
+    }
+  },
+  "gamemodeFeatures": {
+    "DeathRun": {
+      "kills": false,
+      "bedBreaks": false,
+      "individualFinish": true,
+      "teamFinish": true,
+      "individualSurvival": false,
+      "teamElimination": false
+    },
+    "SkyWars": {
+      "kills": true,
+      "bedBreaks": false,
+      "individualFinish": false,
+      "teamFinish": false,
+      "individualSurvival": false,
+      "teamElimination": true
+    },
+    "Survival Games": {
+      "kills": true,
+      "bedBreaks": false,
+      "individualFinish": false,
+      "teamFinish": false,
+      "individualSurvival": false,
+      "teamElimination": true
+    },
+    "BedWars": {
+      "kills": true,
+      "bedBreaks": true,
+      "individualFinish": false,
+      "teamFinish": false,
+      "individualSurvival": false,
+      "teamElimination": true
+    },
+    "Gravity": {
+      "kills": false,
+      "bedBreaks": false,
+      "individualFinish": true,
+      "teamFinish": true,
+      "individualSurvival": true,
+      "teamElimination": false
+    },
+    "BlockDrop": {
+      "kills": false,
+      "bedBreaks": false,
+      "individualFinish": false,
+      "teamFinish": false,
+      "individualSurvival": true,
+      "teamElimination": false
+    },
+    "Block Party": {
+      "kills": false,
+      "bedBreaks": false,
+      "individualFinish": false,
+      "teamFinish": false,
+      "individualSurvival": true,
+      "teamElimination": false
+    }
+  },
+  "detectionPatterns": {
+    "teamElimination": "§c§l» [TEAM] Team has been ELIMINATED",
+    "winner": "§6§l» [TEAM] Team are the WINNERS",
+    "killPrefix": "§...§l»",
+    "bedBreak": "§c§l» Your bed was destroyed by [PLAYER]",
+    "individualFinish": "§a§l» [PLAYER] has finished in [N]th place"
+  },
+  "myIgn": "Qv19v",
+  "autoAddUnknownPlayers": true
+}
