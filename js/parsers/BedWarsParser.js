@@ -61,6 +61,7 @@
                 const ks = this.state.getOrCreatePlayerStats(killer, killerTeam);
                 ks.kills++; ks.finalKills++;
                 this.engine.awardPoints(killerTeam, 'Kill');
+                this.awardFirstBlood(killer, killerTeam);
                 this.state.ensureScore(killerTeam).kills.push({
                     player: killer, victim, time: new Date().toISOString()
                 });

@@ -389,6 +389,15 @@
                 ).length * killLeaderPts;
             }
 
+            const firstBloodPts = Number(table['First Blood'] || 0);
+
+            if (Array.isArray(teamScore.events)) {
+                total += teamScore.events.filter(event =>
+                    event.type === 'First Blood' &&
+                    event.player === playerName
+                ).length * firstBloodPts;
+            }
+
             if (features && (features.individualFinish || features.individualSurvival)) {
                 let hasPlacementRecord = false;
 

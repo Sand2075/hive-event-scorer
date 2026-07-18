@@ -154,6 +154,7 @@
             const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
             ks.kills++;
             this.engine.awardPoints(killerTeam, 'Kill');
+            this.awardFirstBlood(killerName, killerTeam);
             this.state.ensureScore(killerTeam).kills.push({
                 player: killerName, victim: '?', time: new Date().toISOString()
             });
@@ -168,6 +169,7 @@
                 const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
                 ks.kills++;
                 this.engine.awardPoints(killerTeam, 'Kill');
+                this.awardFirstBlood(killerName, killerTeam);
                 this.state.ensureScore(killerTeam).kills.push({
                     player: killerName, victim: victimName, time: new Date().toISOString()
                 });
@@ -200,6 +202,38 @@
                     this.state.playerEliminationOrder.push(playerName);
                 }
             }
+        }
+
+        awardFirstBlood(playerName, teamName) {
+            if (!playerName || !this.engine.isScorableTeam(teamName)) return;
+
+            const table = this.points.forGamemode(this.name) || {};
+
+            // This gamemode does not support First Blood.
+            if (table['First Blood'] === undefined) return;
+
+            // Search every team's events so this can only happen once per game.
+            const alreadyAwarded = Object.values(this.state.scores).some(score =>
+                Array.isArray(score.events) &&
+                score.events.some(event => event.type === 'First Blood')
+            );
+
+            if (alreadyAwarded) return;
+
+            const points = this.engine.awardPoints(teamName, 'First Blood');
+
+            // Attach the player so StatsRenderer can count it as individual points.
+            const score = this.state.ensureScore(teamName);
+            const event = score.events[score.events.length - 1];
+
+            if (event && event.type === 'First Blood') {
+                event.player = playerName;
+            }
+
+            this.state.addLog(
+                `${playerName} got FIRST BLOOD!${points ? ` (+${points})` : ''}`,
+                'success'
+            );
         }
 
         /**
