@@ -12,7 +12,23 @@
 (function (global) {
     'use strict';
 
-    const PLACEMENT_KEYS = { 1: '1st place', 2: '2nd place', 3: '3rd place', 4: '4th place', 5: '5th place' };
+    const PLACEMENT_KEYS = {
+        1: '1st place',
+        2: '2nd place',
+        3: '3rd place',
+        4: '4th place',
+        5: '5th place',
+        6: '6th place',
+        7: '7th place',
+        8: '8th place',
+        9: '9th place',
+        10: '10th place',
+        11: '11th place',
+        12: '12th place',
+        13: '13th place',
+        14: '14th place',
+        15: '15th place'
+    };
     // Catch-all bucket for unrostered players (e.g. the host who is only there to
     // capture the log). It never earns points and its players are excluded from every
     // placement / point calculation until they are reassigned to a real team.
@@ -183,29 +199,68 @@
             if (totalPlayers === 0) return;
 
             const assigned = new Set();
-            let lastStandingTeam = null;
+            const finalPositions = [];
+
             const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
+
             for (let i = 0; i < order.length; i++) {
                 const name = order[i];
                 const team = this.state.findPlayerTeam(name);
                 const pos = totalPlayers - i;
+
                 this.recordPlayerPlacement(team, name, pos);
-                if (pos === 1) lastStandingTeam = team; // last player eliminated = their team outlasted all
+                finalPositions.push({ player: name, team, position: pos });
                 assigned.add(name);
             }
-            // Survivors (never eliminated) take the best remaining slots.
-            const survivors = players.filter(n => !assigned.has(n)).sort((a, b) => a.localeCompare(b));
+
+            // Survivors take the remaining best positions.
+            const survivors = players
+                .filter(n => !assigned.has(n))
+                .sort((a, b) => a.localeCompare(b));
+
             for (let i = 0; i < survivors.length; i++) {
-                const team = this.state.findPlayerTeam(survivors[i]);
+                const name = survivors[i];
+                const team = this.state.findPlayerTeam(name);
                 const pos = survivors.length - i;
-                this.recordPlayerPlacement(team, survivors[i], pos);
-                if (pos === 1) lastStandingTeam = team; // a surviving player's team is the last standing
+
+                this.recordPlayerPlacement(team, name, pos);
+                finalPositions.push({ player: name, team, position: pos });
             }
-            // "Last team standing" bonus (Block Drop / Block Party): the team whose
-            // player outlasted everyone else, awarded once.
-            if (lastStandingTeam && !this.hasPlacement(lastStandingTeam, 'Last team standing')) {
-                this.awardPoints(lastStandingTeam, 'Last team standing');
+
+            // Rank teams by their best-finishing player.
+            // Lowest player placement number = team survived the longest.
+            const bestPlacementByTeam = {};
+
+            for (const result of finalPositions) {
+                if (!this.isScorableTeam(result.team)) continue;
+
+                if (
+                    bestPlacementByTeam[result.team] === undefined ||
+                    result.position < bestPlacementByTeam[result.team]
+                ) {
+                    bestPlacementByTeam[result.team] = result.position;
+                }
             }
+
+            const teamSurvivalRanking = Object.entries(bestPlacementByTeam)
+                .sort((a, b) => a[1] - b[1])
+                .map(([teamName]) => teamName);
+
+            const teamBonusEvents = [
+                'Last team standing',
+                'Second last team standing',
+                'Third last team standing'
+            ];
+
+            for (let i = 0; i < Math.min(3, teamSurvivalRanking.length); i++) {
+                const teamName = teamSurvivalRanking[i];
+                const eventType = teamBonusEvents[i];
+
+                if (!this.hasPlacement(teamName, eventType)) {
+                    this.awardPoints(teamName, eventType);
+                }
+            }
+
             this.state.currentGameCompleted = true;
         }
 
@@ -254,7 +309,7 @@
                     const key = this.placementKey(Number(p.position));
                     if (key) this.awardPoints(t, key);
                 }
-                if (features.teamFinish) this._recomputeFirstTeamFinish(finishPlacements);
+                if (features.teamFinish) this._recomputeTeamFinishes(finishPlacements);
             }
         }
 
@@ -263,22 +318,55 @@
          * whose every current member finished, the one whose last member finished earliest
          * (smallest worst position) gets the single +1.
          */
-        _recomputeFirstTeamFinish(finishPlacements) {
+        _recomputeTeamFinishes(finishPlacements) {
             const posOf = {};
-            for (const p of finishPlacements) posOf[p.player] = Number(p.position);
-            let best = null, bestRank = Infinity;
+
+            for (const p of finishPlacements) {
+                posOf[p.player] = Number(p.position);
+            }
+
+            const completedTeams = [];
+
             for (const [teamName, team] of Object.entries(this.state.teams)) {
                 if (!this.isScorableTeam(teamName)) continue;
+
                 const members = team.players || [];
-                if (members.length === 0 || members.some(m => posOf[m] === undefined)) continue;
-                const completed = Math.max(...members.map(m => posOf[m]));
-                if (completed < bestRank) { bestRank = completed; best = teamName; }
+
+                if (
+                    members.length === 0 ||
+                    members.some(member => posOf[member] === undefined)
+                ) {
+                    continue;
+                }
+
+                const completionPosition = Math.max(
+                    ...members.map(member => posOf[member])
+                );
+
+                completedTeams.push({
+                    teamName,
+                    completionPosition
+                });
             }
-            if (best) this.awardPoints(best, 'First full team finish');
+
+            completedTeams.sort((a, b) =>
+                a.completionPosition - b.completionPosition ||
+                a.teamName.localeCompare(b.teamName)
+            );
+
+            const bonusEvents = [
+                'First full team finish',
+                'Second full team finish',
+                'Third full team finish'
+            ];
+
+            for (let i = 0; i < Math.min(3, completedTeams.length); i++) {
+                this.awardPoints(completedTeams[i].teamName, bonusEvents[i]);
+            }
         }
 
         // ---- contribution math (for stats display) -----------------------
-        playerContribution(teamScore, playerName, playerData, pointSystemTable) {
+        playerContribution(teamScore, playerName, playerData, pointSystemTable, features) {
             if (!teamScore) return 0;
             const table = pointSystemTable || {};
             const killPts = Number(table['Kill'] || 0);
@@ -292,20 +380,42 @@
                 total += teamScore.bedBreaks.filter(e => e.player === playerName).length * bedPts;
             }
 
-            let hasPlacementRecord = false;
-            if (Array.isArray(teamScore.placements)) {
-                for (const pl of teamScore.placements) {
-                    if (pl.player !== playerName) continue;
-                    hasPlacementRecord = true;
-                    const key = this.placementKey(Number(pl.position));
-                    if (key && table[key] !== undefined) total += Number(table[key]);
-                }
+            const killLeaderPts = Number(table['Kill Leader'] || 0);
+
+            if (Array.isArray(teamScore.events)) {
+                total += teamScore.events.filter(event =>
+                    event.type === 'Kill Leader' &&
+                    event.player === playerName
+                ).length * killLeaderPts;
             }
-            if (!hasPlacementRecord && playerData && playerData.placement) {
-                const m = String(playerData.placement).match(/\d+/);
-                if (m) {
-                    const key = this.placementKey(Number(m[0]));
-                    if (key && table[key] !== undefined) total += Number(table[key]);
+
+            if (features && (features.individualFinish || features.individualSurvival)) {
+                let hasPlacementRecord = false;
+
+                if (Array.isArray(teamScore.placements)) {
+                    for (const pl of teamScore.placements) {
+                        if (pl.player !== playerName) continue;
+
+                        hasPlacementRecord = true;
+
+                        const key = this.placementKey(Number(pl.position));
+
+                        if (key && table[key] !== undefined) {
+                            total += Number(table[key]);
+                        }
+                    }
+                }
+
+                if (!hasPlacementRecord && playerData && playerData.placement) {
+                    const m = String(playerData.placement).match(/\d+/);
+
+                    if (m) {
+                        const key = this.placementKey(Number(m[0]));
+
+                        if (key && table[key] !== undefined) {
+                            total += Number(table[key]);
+                        }
+                    }
                 }
             }
             return total;
@@ -313,16 +423,34 @@
 
         currentPlayerContribution(playerName, playerData) {
             if (!playerData || !playerData.team) return 0;
+
             const teamScore = this.state.scores[playerData.team];
             const table = this.points.forGamemode(this.state.gamemode) || {};
-            return this.playerContribution(teamScore, playerName, playerData, table);
+            const features = this.points.featuresFor(this.state.gamemode) || {};
+
+            return this.playerContribution(
+                teamScore,
+                playerName,
+                playerData,
+                table,
+                features
+            );
         }
 
         gamePlayerContribution(game, playerName, playerData) {
             if (!game || !playerData || !playerData.team || !game.scores) return 0;
+
             const teamScore = game.scores[playerData.team];
             const table = this.points.forGamemode(game.gamemode) || {};
-            return this.playerContribution(teamScore, playerName, playerData, table);
+            const features = this.points.featuresFor(game.gamemode) || {};
+
+            return this.playerContribution(
+                teamScore,
+                playerName,
+                playerData,
+                table,
+                features
+            );
         }
     }
 

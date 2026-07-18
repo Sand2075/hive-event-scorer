@@ -52,7 +52,6 @@
                 // points (they stack on the team), so attribute them directly. In
                 // team-placement modes (SkyWars / BedWars / Survival Games) the 1st/2nd/3rd
                 // points belong to the whole team, so the total is split across players.
-                const individual = !!(features.individualFinish || features.individualSurvival);
 
                 for (const [teamName, teamScore] of Object.entries(game.scores)) {
                     if (teamName === 'UNKNOWN') continue; // holding bucket, never scores
@@ -64,26 +63,8 @@
                     const contrib = name => this.engine.gamePlayerContribution(game, name, game.playerStats[name]);
                     const ranked = players.slice().sort((a, b) => contrib(b) - contrib(a));
 
-                    if (individual) {
-                        // Each player keeps what they personally scored; any team-level
-                        // bonus (first full team finish / last team standing) is the
-                        // leftover and is credited to the team's top earner so the player
-                        // totals still reconcile with the team total.
-                        const sum = players.reduce((acc, n) => acc + contrib(n), 0);
-                        let leftover = teamScore.score - sum;
-                        for (const name of ranked) {
-                            let pts = contrib(name);
-                            if (leftover > 0) { pts += leftover; leftover = 0; }
-                            add(name, game.gamemode, pts);
-                        }
-                    } else {
-                        const base = Math.floor(teamScore.score / players.length);
-                        let remainder = teamScore.score - base * players.length;
-                        for (const name of ranked) {
-                            let pts = base;
-                            if (remainder > 0) { pts += 1; remainder--; }
-                            add(name, game.gamemode, pts);
-                        }
+                    for (const name of ranked) {
+                        add(name, game.gamemode, contrib(name));
                     }
                 }
             }
@@ -105,10 +86,30 @@
             }
             return Object.entries(teams).map(([teamName, points]) => {
                 const roster = this.state.teams[teamName]?.players || [];
+
                 const players = roster
-                    .map(name => ({ name, points: playerScores[name] ? playerScores[name].totalPoints : 0 }))
+                    .map(name => ({
+                        name,
+                        points: playerScores[name]
+                            ? playerScores[name].totalPoints
+                            : 0
+                    }))
                     .sort((a, b) => b.points - a.points);
-                return { team: teamName, teamColor: this.teamColor(teamName), points, players };
+
+                const playerPoints = players.reduce(
+                    (sum, player) => sum + player.points,
+                    0
+                );
+
+                const teamPoints = Math.max(0, points - playerPoints);
+
+                return {
+                    team: teamName,
+                    teamColor: this.teamColor(teamName),
+                    points,
+                    teamPoints,
+                    players
+                };
             }).sort((a, b) => b.points - a.points);
         }
 
@@ -142,15 +143,33 @@
                 totalFinalKills += ps.finalKills || 0;
                 totalBedBreaks += ps.bedBreaks || 0;
                 if (ps.placement === '1st') wins++;
+                const isSkyWars = game.gamemode === 'SkyWars';
+                const killLeader = isSkyWars && Object.values(game.scores || {}).some(score =>
+                    Array.isArray(score.events) &&
+                    score.events.some(event =>
+                        event.type === 'Kill Leader' &&
+                        event.player === name
+                    )
+                );
+
                 games.push({
                     gamemode: game.gamemode,
                     date: game.startTime,
                     points: pts,
-                    placement: ps.placement || '-',
+
+                    // Only expose placement as an individual stat in individual-placement modes.
+                    placement: (
+                        this.points.featuresFor(game.gamemode)?.individualFinish ||
+                        this.points.featuresFor(game.gamemode)?.individualSurvival
+                    ) ? (ps.placement || '-') : null,
+
                     kills: ps.kills || 0,
                     deaths: ps.deaths || 0,
                     finalKills: ps.finalKills || 0,
                     bedBreaks: ps.bedBreaks || 0,
+
+                    killLeader,
+
                     features: this.points.featuresFor(game.gamemode) || {}
                 });
             }
@@ -183,7 +202,15 @@
                             <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
                                 <span class="pname">${this.escapeHtml(p.name)}</span>
                                 <span class="ppts">${p.points}</span>
-                            </div>`).join('')}
+                            </div>
+                        `).join('')}
+
+                        ${t.teamPoints > 0 ? `
+                            <div class="standings-player standings-team-points">
+                                <span class="pname">Team Points</span>
+                                <span class="ppts">${t.teamPoints}</span>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>`).join('');
 

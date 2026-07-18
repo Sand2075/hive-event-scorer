@@ -203,13 +203,6 @@
             this.on('addNewGamemode', 'click', () => this.addNewGamemode());
             this.on('deleteGamemode', 'click', () => this.deleteGamemode());
             this.on('saveSettings', 'click', () => this.saveSettings());
-            // Apply + persist the auto-add toggle immediately so turning it off takes
-            // effect right away, without waiting for a separate "Save Settings" click.
-            this.on('autoAddUnknownPlayers', 'change', e => {
-                this.points.autoAddUnknownPlayers = e.target.checked;
-                this.points.save();
-                this.state.addLog(`Auto-add unknown players ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
-            });
             this.on('resetSettings', 'click', () => {
                 if (confirm('Reset all settings to defaults? This cannot be undone.')) {
                     this.points.reset(); this.updateGamemodeDropdowns(); this.settingsView.renderAll();
@@ -444,15 +437,44 @@
             </div>`;
 
             const games = d.games.length ? d.games.map(g => `
-                <div class="pd-game">
-                    <div class="pd-game-head"><span>${esc(g.gamemode)}</span><span>${g.points} pts</span></div>
-                    <div class="pd-game-stats">
-                        <span>Placement: ${esc(g.placement)}</span>
-                        ${g.features.kills ? `<span>K: ${g.kills}</span><span>D: ${g.deaths}</span><span>FK: ${g.finalKills}</span>` : ''}
-                        ${g.features.bedBreaks && g.bedBreaks > 0 ? `<span>Beds: ${g.bedBreaks}</span>` : ''}
-                        <span class="pd-date">${new Date(g.date).toLocaleString()}</span>
+                    <div class="pd-game">
+                        <div class="pd-game-head">
+                            <span>${esc(g.gamemode)}</span>
+                            <span>${g.points} pts</span>
+                        </div>
+
+                        <div class="pd-game-stats">
+                            ${g.placement
+                                ? `<span>Placement: ${esc(g.placement)}</span>`
+                                : ''
+                            }
+
+                            ${g.features.kills
+                                ? `
+                                    <span>K: ${g.kills}</span>
+                                    <span>D: ${g.deaths}</span>
+                                    ${g.gamemode === 'BedWars'
+                                        ? `<span>FK: ${g.finalKills}</span>`
+                                        : ''
+                                    }
+                                `
+                                : ''
+                            }
+
+                            ${g.gamemode === 'SkyWars'
+                                ? `<span>Kill Leader: ${g.killLeader ? 'True' : 'False'}</span>`
+                                : ''
+                            }
+
+                            ${g.features.bedBreaks && g.bedBreaks > 0
+                                ? `<span>Beds: ${g.bedBreaks}</span>`
+                                : ''
+                            }
+
+                            <span class="pd-date">${new Date(g.date).toLocaleString()}</span>
+                        </div>
                     </div>
-                </div>`).join('') : '<p class="empty-state">No completed games for this player yet.</p>';
+                `).join('') : '<p class="empty-state">No completed games for this player yet.</p>';
 
             bodyEl.innerHTML = summary + '<h3 style="margin:8px 0 10px;">Per-Game Breakdown</h3>' + games;
             document.getElementById('playerModal').classList.add('open');

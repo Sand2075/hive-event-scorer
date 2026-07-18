@@ -8,15 +8,114 @@
 (function (global) {
     'use strict';
 
-    function defaultPointSystems() {
+        function defaultPointSystems() {
         return {
-            'DeathRun': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1 },
-            'SkyWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1 },
-            'Survival Games': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1 },
-            'BedWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Bed Break': 1 },
-            'Gravity': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1 },
-            'BlockDrop': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'Last team standing': 1 },
-            'Block Party': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'Last team standing': 1 }
+            'DeathRun': {
+                '1st place': 160,
+                '2nd place': 144,
+                '3rd place': 128,
+                '4th place': 112,
+                '5th place': 96,
+                '6th place': 80,
+                '7th place': 72,
+                '8th place': 64,
+                '9th place': 56,
+                '10th place': 48,
+                '11th place': 40,
+                '12th place': 32,
+                '13th place': 24,
+                '14th place': 16,
+                '15th place': 8,
+                'First full team finish': 30,
+                'Second full team finish': 20,
+                'Third full team finish': 10
+            },
+
+            'SkyWars': {
+                '1st place': 80,
+                '2nd place': 60,
+                '3rd place': 40,
+                'Kill': 45,
+                'Kill Leader': 45
+            },
+
+            'Survival Games': {
+                '1st place': 80,
+                '2nd place': 60,
+                '3rd place': 40,
+                'Kill': 50
+            },
+
+            'BedWars': {
+                '1st place': 80,
+                '2nd place': 60,
+                '3rd place': 40,
+                'Kill': 45,
+                'Bed Break': 60
+            },
+
+            'Gravity': {
+                '1st place': 160,
+                '2nd place': 144,
+                '3rd place': 128,
+                '4th place': 112,
+                '5th place': 96,
+                '6th place': 80,
+                '7th place': 72,
+                '8th place': 64,
+                '9th place': 56,
+                '10th place': 48,
+                '11th place': 40,
+                '12th place': 32,
+                '13th place': 24,
+                '14th place': 16,
+                '15th place': 8,
+                'First full team finish': 30,
+                'Second full team finish': 20,
+                'Third full team finish': 10
+            },
+
+            'BlockDrop': {
+                '1st place': 160,
+                '2nd place': 144,
+                '3rd place': 128,
+                '4th place': 112,
+                '5th place': 96,
+                '6th place': 80,
+                '7th place': 72,
+                '8th place': 64,
+                '9th place': 56,
+                '10th place': 48,
+                '11th place': 40,
+                '12th place': 32,
+                '13th place': 24,
+                '14th place': 16,
+                '15th place': 8,
+                'Last team standing': 30,
+                'Second last team standing': 20,
+                'Third last team standing': 10
+            },
+
+            'Block Party': {
+                '1st place': 160,
+                '2nd place': 144,
+                '3rd place': 128,
+                '4th place': 112,
+                '5th place': 96,
+                '6th place': 80,
+                '7th place': 72,
+                '8th place': 64,
+                '9th place': 56,
+                '10th place': 48,
+                '11th place': 40,
+                '12th place': 32,
+                '13th place': 24,
+                '14th place': 16,
+                '15th place': 8,
+                'Last team standing': 30,
+                'Second last team standing': 20,
+                'Third last team standing': 10
+            }
         };
     }
 
@@ -28,10 +127,10 @@
             // teamElimination: team placement (1st/2nd/3rd) is decided by the order teams are
             //   knocked out - i.e. when every player on a team has been killed - not by points.
             'DeathRun': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
-            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
-            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
-            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
-            'Gravity': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
+            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true },
+            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true },
+            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true },
+            'Gravity': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: true, teamElimination: false },
             'BlockDrop': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
             'Block Party': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false }
         };

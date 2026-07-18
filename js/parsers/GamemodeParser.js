@@ -142,12 +142,7 @@
          */
         resolvePlayerTeam(playerName) {
             const team = this.state.findPlayerTeam(playerName);
-            // A real, manually-assigned team always wins.
-            if (team && team !== 'UNKNOWN') return team;
-            // Otherwise the player is unrostered (or only sitting in the UNKNOWN holding
-            // bucket). With auto-add OFF we ignore them entirely so scoring relies solely on
-            // players recorded on real teams - including any left over on UNKNOWN from a
-            // previous run while the setting was on.
+            if (team) return team;
             if (this.points.autoAddUnknownPlayers === false) return null;
             return this.state.addUnknownPlayer(playerName);
         }
@@ -403,20 +398,39 @@
         }
 
         trackTeamFinish(teamName, playerName) {
-            if (!this.engine.isScorableTeam(teamName)) return; // UNKNOWN can't claim the team-finish bonus
-            if (!this.state.playersFinished[teamName]) this.state.playersFinished[teamName] = [];
+            if (!this.engine.isScorableTeam(teamName)) return;
+
+            if (!this.state.playersFinished[teamName]) {
+                this.state.playersFinished[teamName] = [];
+            }
+
             if (!this.state.playersFinished[teamName].includes(playerName)) {
                 this.state.playersFinished[teamName].push(playerName);
             }
+
             const team = this.state.teams[teamName];
             if (!team || !team.players) return;
-            const allFinished = team.players.every(p => this.state.playersFinished[teamName].includes(p));
-            if (allFinished && !this.state.teamsFullyFinished.includes(teamName)) {
-                this.state.teamsFullyFinished.push(teamName);
-                if (this.state.teamsFullyFinished.length === 1) {
-                    this.engine.awardPoints(teamName, 'First full team finish');
-                    this.state.addLog(`${teamName} is the FIRST team to fully finish!`, 'success');
-                }
+
+            const allFinished = team.players.every(p =>
+                this.state.playersFinished[teamName].includes(p)
+            );
+
+            if (!allFinished) return;
+            if (this.state.teamsFullyFinished.includes(teamName)) return;
+
+            this.state.teamsFullyFinished.push(teamName);
+
+            const finishPosition = this.state.teamsFullyFinished.length;
+
+            if (finishPosition === 1) {
+                this.engine.awardPoints(teamName, 'First full team finish');
+                this.state.addLog(`${teamName} was the FIRST team to finish!`, 'success');
+            } else if (finishPosition === 2) {
+                this.engine.awardPoints(teamName, 'Second full team finish');
+                this.state.addLog(`${teamName} was the SECOND team to finish!`, 'success');
+            } else if (finishPosition === 3) {
+                this.engine.awardPoints(teamName, 'Third full team finish');
+                this.state.addLog(`${teamName} was the THIRD team to finish!`, 'success');
             }
         }
 
