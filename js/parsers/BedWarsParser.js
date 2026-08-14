@@ -48,29 +48,103 @@
          * @returns {boolean} True when handled.
          */
         detectFinalKill(clean) {
-            const m = clean.match(/FINAL KILL!?\s+(.+?)\s+eliminated\s+(.+?)\s*$/i);
+            // "FINAL KILL! Qv19v eliminated themselves"
+            const selfMatch = clean.match(
+                /FINAL KILL!?\s+(.+?)\s+eliminated\s+themselves\s*$/i
+            );
+
+            if (selfMatch) {
+                const playerName = selfMatch[1].trim();
+                const canonical =
+                    this.state.resolveCanonicalPlayer(playerName);
+
+                const team =
+                    this.resolvePlayerTeam(playerName);
+
+                if (team) {
+                    const ps = this.state.getOrCreatePlayerStats(
+                        canonical,
+                        team
+                    );
+
+                    ps.deaths++;
+
+                    this.markEliminated(
+                        canonical,
+                        team
+                    );
+                }
+
+                this.state.addLog(
+                    `FINAL DEATH: ${this.subLabel(playerName, canonical)} eliminated themselves`,
+                    'warning'
+                );
+
+                return true;
+            }
+
+            // Normal final kill:
+            // "FINAL KILL! Killer eliminated Victim"
+            const m = clean.match(
+                /FINAL KILL!?\s+(.+?)\s+eliminated\s+(.+?)\s*$/i
+            );
+
             if (!m) return false;
+
             const killer = m[1].trim();
             const victim = m[2].trim();
+
             const killerTeam = this.resolvePlayerTeam(killer);
             const victimTeam = this.resolvePlayerTeam(victim);
-            const canonicalKiller = this.state.resolveCanonicalPlayer(killer);
-            const canonicalVictim = this.state.resolveCanonicalPlayer(victim);
+
+            const canonicalKiller =
+                this.state.resolveCanonicalPlayer(killer);
+
+            const canonicalVictim =
+                this.state.resolveCanonicalPlayer(victim);
+
             if (killerTeam) {
-                const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
-                ks.kills++; ks.finalKills++;
+                const ks = this.state.getOrCreatePlayerStats(
+                    canonicalKiller,
+                    killerTeam
+                );
+
+                ks.kills++;
+                ks.finalKills++;
+
                 this.engine.awardPoints(killerTeam, 'Kill');
+
                 this.state.ensureScore(killerTeam).kills.push({
-                    player: canonicalKiller, victim: canonicalVictim, time: new Date().toISOString()
+                    player: canonicalKiller,
+                    victim: canonicalVictim,
+                    time: new Date().toISOString()
                 });
-                this.awardFirstBlood(canonicalKiller, killerTeam);
+
+                this.awardFirstBlood(
+                    canonicalKiller,
+                    killerTeam
+                );
             }
+
             if (victimTeam) {
-                const vs = this.state.getOrCreatePlayerStats(canonicalVictim, victimTeam);
+                const vs = this.state.getOrCreatePlayerStats(
+                    canonicalVictim,
+                    victimTeam
+                );
+
                 vs.deaths++;
-                this.markEliminated(canonicalVictim, victimTeam);
+
+                this.markEliminated(
+                    canonicalVictim,
+                    victimTeam
+                );
             }
-            this.state.addLog(`FINAL KILL: ${this.subLabel(killer, canonicalKiller)} eliminated ${this.subLabel(victim, canonicalVictim)}`, 'success');
+
+            this.state.addLog(
+                `FINAL KILL: ${this.subLabel(killer, canonicalKiller)} eliminated ${this.subLabel(victim, canonicalVictim)}`,
+                'success'
+            );
+
             return true;
         }
 

@@ -12,7 +12,7 @@
     function defaultPointSystems() {
         return {
             'DeathRun': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
-            'SkyWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Kill Leader': 0, 'First Blood': 0, 'Mystery Chest': 0 },
+            'SkyWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Indiv 1st place': 4, 'Indiv 2nd place': 3, 'Indiv 3rd place': 2, 'Kill': 1, 'Kill Leader': 0, 'First Blood': 0, 'Mystery Chest': 0 },
             'Survival Games': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'First Blood': 0 },
             'BedWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Bed Break': 1, 'First Blood': 0 },
             'Gravity': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
@@ -63,6 +63,7 @@
             this.enableSoloPlacements = false;
             this.enableChestPoints = false;
             this.blockPartyTieMode = 'shared-first';
+            this.pvpTeamTieMode = 'shared-first';
             this.STORAGE_KEY = 'hive_settings';
         }
 
@@ -96,6 +97,9 @@
                 if (settings.blockPartyTieMode === 'shared-first' || settings.blockPartyTieMode === 'shared-placement') {
                     this.blockPartyTieMode = settings.blockPartyTieMode;
                 }
+                if (settings.pvpTeamTieMode === 'shared-first' || settings.pvpTeamTieMode === 'shared-placement') {
+                    this.pvpTeamTieMode = settings.pvpTeamTieMode;
+                }
             } catch (err) {
                 console.error('Error loading settings:', err);
                 this.reset();
@@ -117,7 +121,8 @@
                 enableExtendedTeamBonuses: this.enableExtendedTeamBonuses,
                 enableSoloPlacements: this.enableSoloPlacements,
                 enableChestPoints: this.enableChestPoints,
-                blockPartyTieMode: this.blockPartyTieMode
+                blockPartyTieMode: this.blockPartyTieMode,
+                pvpTeamTieMode: this.pvpTeamTieMode
             };
             const store = global.Hive.Storage;
             if (store) store.setItem(this.STORAGE_KEY, JSON.stringify(settings));
@@ -138,6 +143,7 @@
             this.enableSoloPlacements = false;
             this.enableChestPoints = false;
             this.blockPartyTieMode = 'shared-first';
+            this.pvpTeamTieMode = 'shared-first';
             this.save();
         }
 
@@ -158,6 +164,9 @@
             if (typeof settings.enableChestPoints === 'boolean') this.enableChestPoints = settings.enableChestPoints;
             if (settings.blockPartyTieMode === 'shared-first' || settings.blockPartyTieMode === 'shared-placement') {
                 this.blockPartyTieMode = settings.blockPartyTieMode;
+            }
+            if (settings.pvpTeamTieMode === 'shared-first' || settings.pvpTeamTieMode === 'shared-placement') {
+                this.pvpTeamTieMode = settings.pvpTeamTieMode;
             }
             this.save();
         }
@@ -201,7 +210,8 @@
                 enableExtendedTeamBonuses: this.enableExtendedTeamBonuses,
                 enableSoloPlacements: this.enableSoloPlacements,
                 enableChestPoints: this.enableChestPoints,
-                blockPartyTieMode: this.blockPartyTieMode
+                blockPartyTieMode: this.blockPartyTieMode,
+                pvpTeamTieMode: this.pvpTeamTieMode
             };
         }
 
@@ -225,7 +235,7 @@
             if (!features || !features.pvp) return features;
             return Object.assign({}, features, {
                 individualSurvival: this.enableSoloPlacements,
-                teamElimination: !this.enableSoloPlacements
+                teamElimination: true
             });
         }
 

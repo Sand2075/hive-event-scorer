@@ -10,6 +10,7 @@
     const MAX_PLACEMENTS = 50;
     const VISIBLE_PLACEMENTS = 12;
     const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th) place$/;
+    const INDIV_PLACEMENT_RE = /^Indiv (\d+)(?:st|nd|rd|th) place$/;
 
     class SettingsRenderer extends Base {
         selectedGamemode() {
@@ -48,13 +49,18 @@
                 </div>`;
 
             const otherRows = Object.entries(table)
-                .filter(([action]) => !PLACEMENT_RE.test(action) && !this.isToggledOffKey(action))
+                .filter(([action]) =>
+                    !PLACEMENT_RE.test(action) &&
+                    !INDIV_PLACEMENT_RE.test(action) &&
+                    !this.isToggledOffKey(action)
+                )
                 .map(([action, value]) => pointRow(action, value))
                 .join('');
 
             const { ChatUtils } = global.Hive;
             let placementRows = '';
             let hiddenRows = '';
+            const features = this.points.featuresFor(mode) || {};
             for (let i = 1; i <= MAX_PLACEMENTS; i++) {
                 const key = ChatUtils.ordinal(i) + ' place';
                 const row = pointRow(key, table[key] || 0, ' data-placement="1"');
@@ -62,23 +68,109 @@
                 else hiddenRows += row;
             }
 
+            let indivPlacementRows = '';
+            let hiddenIndivRows = '';
+
+            if (features.pvp && this.points.enableSoloPlacements) {
+                for (let i = 1; i <= MAX_PLACEMENTS; i++) {
+                    const placement = ChatUtils.ordinal(i) + ' place';
+                    const key = 'Indiv ' + placement;
+
+                    const row = pointRow(
+                        key,
+                        table[key] || 0,
+                        ' data-indiv-placement="1"'
+                    );
+
+                    if (i <= VISIBLE_PLACEMENTS) {
+                        indivPlacementRows += row;
+                    } else {
+                        hiddenIndivRows += row;
+                    }
+                }
+            }
+
             const tieModeRow = mode === 'Block Party' ? `
                 <div class="point-item">
                     <label for="blockPartyTieMode">Tie Handling</label>
                     <select id="blockPartyTieMode">
-                        <option value="shared-first" ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}>Multiple 1st Places</option>
-                        <option value="shared-placement" ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}>Shared Next Placement</option>
+                        <option value="shared-first"
+                            ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}>
+                            Multiple 1st Places
+                        </option>
+
+                        <option value="shared-placement"
+                            ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}>
+                            Shared Next Placement
+                        </option>
                     </select>
-                </div>` : '';
+                </div>
+            ` : features.pvp ? `
+                <div class="point-item">
+                    <label for="pvpTeamTieMode">Team Tie Handling</label>
+                    <select id="pvpTeamTieMode">
+                        <option value="shared-first"
+                            ${this.points.pvpTeamTieMode === 'shared-first' ? 'selected' : ''}>
+                            Multiple 1st Places
+                        </option>
+
+                        <option value="shared-placement"
+                            ${this.points.pvpTeamTieMode === 'shared-placement' ? 'selected' : ''}>
+                            Shared Next Placement
+                        </option>
+                    </select>
+                </div>
+            ` : '';
 
             host.innerHTML = `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
-                otherRows +
-                tieModeRow +
-                `<h4 class="placement-heading">Placement Points</h4>` +
-                placementRows +
-                `<div id="extraPlacements" class="extra-placements hidden">${hiddenRows}</div>` +
-                `<button type="button" id="togglePlacements" class="btn btn-secondary btn-small">` +
-                `Show all ${MAX_PLACEMENTS} placements</button>`;
+
+            otherRows +
+            tieModeRow +
+
+            `<h4 class="placement-heading">
+                ${features.pvp ? 'Team Placement Points' : 'Placement Points'}
+            </h4>` +
+
+            placementRows +
+
+            `<div id="extraPlacements" class="extra-placements hidden">
+                ${hiddenRows}
+            </div>` +
+
+            `<button
+                type="button"
+                id="togglePlacements"
+                class="btn btn-secondary btn-small"
+            >
+                Show all ${MAX_PLACEMENTS} placements
+            </button>` +
+
+            (
+                features.pvp && this.points.enableSoloPlacements
+                    ? `
+                        <h4 class="placement-heading">
+                            Indiv Placement Points
+                        </h4>
+
+                        ${indivPlacementRows}
+
+                        <div
+                            id="extraIndivPlacements"
+                            class="extra-placements hidden"
+                        >
+                            ${hiddenIndivRows}
+                        </div>
+
+                        <button
+                            type="button"
+                            id="toggleIndivPlacements"
+                            class="btn btn-secondary btn-small"
+                        >
+                            Show all ${MAX_PLACEMENTS} indiv placements
+                        </button>
+                    `
+                    : ''
+            );
 
             const btn = this.$('togglePlacements');
             if (btn) {
@@ -87,6 +179,24 @@
                     if (!extra) return;
                     const nowHidden = extra.classList.toggle('hidden');
                     btn.textContent = nowHidden ? `Show all ${MAX_PLACEMENTS} placements` : 'Show fewer placements';
+                });
+            }
+
+            const indivBtn = this.$('toggleIndivPlacements');
+
+            if (indivBtn) {
+                indivBtn.addEventListener('click', () => {
+                    const extra =
+                        this.$('extraIndivPlacements');
+
+                    if (!extra) return;
+
+                    const nowHidden =
+                        extra.classList.toggle('hidden');
+
+                    indivBtn.textContent = nowHidden
+                        ? `Show all ${MAX_PLACEMENTS} indiv placements`
+                        : 'Show fewer indiv placements';
                 });
             }
         }
@@ -132,7 +242,7 @@
                 this.$('pointsSettings').querySelectorAll('input[type="number"]').forEach(input => {
                     const action = input.dataset.action;
                     const value = parseInt(input.value, 10) || 0;
-                    const isPlacement = PLACEMENT_RE.test(action);
+                    const isPlacement = PLACEMENT_RE.test(action) || INDIV_PLACEMENT_RE.test(action);
                     // Zero-valued non-default placements stay out of the table.
                     if (isPlacement && value === 0 && defaults[action] === undefined) {
                         delete table[action];
@@ -163,6 +273,11 @@
             if (chestPoints) this.points.enableChestPoints = chestPoints.checked;
             const tieMode = this.$('blockPartyTieMode');
             if (tieMode) this.points.blockPartyTieMode = tieMode.value;
+            const pvpTieMode = this.$('pvpTeamTieMode');
+
+            if (pvpTieMode) {
+                this.points.pvpTeamTieMode = pvpTieMode.value;
+            }
         }
 
         renderAll() {

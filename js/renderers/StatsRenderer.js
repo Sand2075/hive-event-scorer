@@ -103,9 +103,7 @@
 
                     if (
                         placementMatch &&
-                        features.teamElimination &&
-                        !features.individualFinish &&
-                        !features.individualSurvival
+                        features.teamElimination
                     ) {
                         isTeamEvent = true;
                     }

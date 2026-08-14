@@ -178,7 +178,18 @@
          */
         tryFinalize() {
             const active = this.getActiveTeams();
-            if (active.length === 1) this.finalizeGamePlacements(active[0]);
+
+            if (active.length !== 1) return;
+
+            const features =
+                this.points.featuresFor(this.state.gamemode) || {};
+
+            if (features.pvp && features.teamElimination) {
+                // For PvP, wait for the winner/Game OVER line.
+                return;
+            }
+
+            this.finalizeGamePlacements(active[0]);
         }
 
         /**
@@ -187,11 +198,94 @@
          */
         finalizeFromSurvival() {
             const active = this.getActiveTeams();
+
             if (active.length === 0) return;
-            if (active.length === 1) { this.finalizeGamePlacements(active[0]); return; }
+
+            if (active.length === 1) {
+                this.finalizeGamePlacements(active[0]);
+                return;
+            }
+
+            const features =
+                this.points.featuresFor(this.state.gamemode) || {};
+
+            // PvP team-placement modes can legitimately end with
+            // multiple surviving teams, so treat them as a tie.
+            if (
+                features.pvp &&
+                features.teamElimination &&
+                active.length > 1
+            ) {
+                this.finalizePvpTeamTie(active);
+                return;
+            }
+
+            // Existing fallback for other team-elimination modes.
             const winner = active.slice().sort((a, b) =>
-                this.aliveCount(b) - this.aliveCount(a) || a.localeCompare(b))[0];
+                this.aliveCount(b) - this.aliveCount(a) ||
+                a.localeCompare(b)
+            )[0];
+
             this.finalizeGamePlacements(winner);
+        }
+
+        finalizePvpTeamTie(activeTeams) {
+            const tiedTeams = activeTeams.filter(team =>
+                this.isScorableTeam(team)
+            );
+
+            if (tiedTeams.length === 0) return;
+
+            const tieMode =
+                this.points.pvpTeamTieMode || 'shared-first';
+
+            const tiedCount = tiedTeams.length;
+
+            const tiedPosition =
+                tieMode === 'shared-placement'
+                    ? tiedCount
+                    : 1;
+
+            // Give all surviving teams the same placement.
+            for (const teamName of tiedTeams) {
+                this.recordTeamPlacement(
+                    teamName,
+                    tiedPosition
+                );
+            }
+
+            // Reassign eliminated teams based on the tie style.
+            //
+            // shared-first with 3 survivors:
+            // 1st, 1st, 1st, then 2nd, 3rd...
+            //
+            // shared-placement with 3 survivors:
+            // 3rd, 3rd, 3rd, then 4th, 5th...
+            const eliminatedCount =
+                this.state.eliminationOrder.length;
+
+            for (let i = 0; i < eliminatedCount; i++) {
+                const teamName =
+                    this.state.eliminationOrder[i];
+
+                let position;
+
+                if (tieMode === 'shared-first') {
+                    position =
+                        eliminatedCount - i + 1;
+                } else {
+                    position =
+                        tiedCount +
+                        (eliminatedCount - i);
+                }
+
+                this.recordTeamPlacement(
+                    teamName,
+                    position
+                );
+            }
+
+            this.state.currentGameCompleted = true;
         }
 
         /**
@@ -405,27 +499,191 @@
 
                         hasPlacementRecord = true;
 
-                        const key = this.placementKey(Number(pl.position));
+                        let key =
+                            this.placementKey(Number(pl.position));
 
-                        if (key && table[key] !== undefined) {
+                        if (
+                            features?.pvp &&
+                            pl.type === 'pvp-individual'
+                        ) {
+                            key = `Indiv ${key}`;
+                        }
+
+                        if (
+                            key &&
+                            table[key] !== undefined
+                        ) {
                             total += Number(table[key]);
                         }
                     }
                 }
 
-                if (!hasPlacementRecord && playerData && playerData.placement) {
-                    const m = String(playerData.placement).match(/\d+/);
+                if (
+                    !features?.pvp &&
+                    !hasPlacementRecord &&
+                    playerData &&
+                    playerData.placement
+                ) {
+                    const m =
+                        String(playerData.placement).match(/\d+/);
 
                     if (m) {
-                        const key = this.placementKey(Number(m[0]));
+                        const key =
+                            this.placementKey(Number(m[0]));
 
-                        if (key && table[key] !== undefined) {
+                        if (
+                            key &&
+                            table[key] !== undefined
+                        ) {
                             total += Number(table[key]);
                         }
                     }
                 }
             }
             return total;
+        }
+
+        finalizePvpIndividualPlacements() {
+            const players = [...new Set(
+                this.state.allPlayerNames()
+                    .map(name => this.state.resolveCanonicalPlayer(name))
+            )].filter(name => this.isScorablePlayer(name));
+
+            if (players.length === 0) return;
+
+            const eliminationIndex = {};
+
+            this.state.playerEliminationOrder.forEach((name, index) => {
+                const canonical =
+                    this.state.resolveCanonicalPlayer(name);
+
+                if (eliminationIndex[canonical] === undefined) {
+                    eliminationIndex[canonical] = index;
+                }
+            });
+
+            // Find every team that still has at least one surviving player.
+            const survivingTeams = new Set();
+
+            for (const playerName of players) {
+                if (eliminationIndex[playerName] !== undefined) continue;
+
+                const team =
+                    this.state.findPlayerTeam(playerName);
+
+                if (this.isScorableTeam(team)) {
+                    survivingTeams.add(team);
+                }
+            }
+
+            const tieMode =
+                this.points.pvpTeamTieMode || 'shared-first';
+
+            for (const playerName of players) {
+                const playerTeam =
+                    this.state.findPlayerTeam(playerName);
+
+                if (!this.isScorableTeam(playerTeam)) continue;
+
+                const playerWasEliminated =
+                    eliminationIndex[playerName] !== undefined;
+
+                let finalPosition;
+
+                // ---------------- surviving players ----------------
+
+                if (!playerWasEliminated) {
+                    // Every player surviving on one of the tied teams
+                    // receives the same placement.
+                    finalPosition =
+                        tieMode === 'shared-placement'
+                            ? survivingTeams.size
+                            : 1;
+                }
+
+                // ---------------- eliminated players ----------------
+
+                else {
+                    const enemies = players.filter(other =>
+                        other !== playerName &&
+                        this.state.findPlayerTeam(other) !== playerTeam
+                    );
+
+                    let enemiesOutlived = 0;
+
+                    const playerEliminationIndex =
+                        eliminationIndex[playerName];
+
+                    for (const enemy of enemies) {
+                        const enemyWasEliminated =
+                            eliminationIndex[enemy] !== undefined;
+
+                        if (
+                            enemyWasEliminated &&
+                            eliminationIndex[enemy] < playerEliminationIndex
+                        ) {
+                            enemiesOutlived++;
+                        }
+                    }
+
+                    finalPosition =
+                        Math.max(
+                            1,
+                            enemies.length - enemiesOutlived
+                        );
+                }
+
+                this.recordPvpIndividualPlacement(
+                    playerTeam,
+                    playerName,
+                    finalPosition
+                );
+            }
+        }
+
+        recordPvpIndividualPlacement(teamName, playerName, position) {
+            const canonical =
+                this.state.resolveCanonicalPlayer(playerName);
+
+            const ps =
+                this.state.getOrCreatePlayerStats(
+                    canonical,
+                    teamName
+                );
+
+            ps.placement =
+                global.Hive.ChatUtils.ordinal(position);
+
+            const normalKey =
+                this.placementKey(position);
+
+            if (!normalKey) return;
+
+            const key =
+                `Indiv ${normalKey}`;
+
+            const score =
+                this.state.ensureScore(teamName);
+
+            const already =
+                score.placements.some(p =>
+                    p.player === canonical &&
+                    p.type === 'pvp-individual'
+                );
+
+            if (already) return;
+
+            this.awardPoints(
+                teamName,
+                key
+            );
+
+            score.placements.push({
+                player: canonical,
+                position,
+                type: 'pvp-individual',
+                time: new Date().toISOString()
+            });
         }
 
         /**

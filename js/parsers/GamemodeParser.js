@@ -90,8 +90,23 @@
          */
         onGameOver(/* clean */) {
             this.state.currentGameCompleted = true;
-            if (this.features.individualSurvival) this.engine.finalizePlayerPlacements();
-            else if (this.features.teamElimination) this.engine.finalizeFromSurvival();
+
+            // PvP solo placement scoring uses enemy-relative survival,
+            // not normal global player placements.
+            if (
+                this.features.pvp &&
+                this.points.enableSoloPlacements
+            ) {
+                this.engine.finalizePvpIndividualPlacements();
+            }
+            else if (this.features.individualSurvival) {
+                this.engine.finalizePlayerPlacements();
+            }
+
+            // PvP team placement scoring still happens separately.
+            if (this.features.teamElimination) {
+                this.engine.finalizeFromSurvival();
+            }
         }
 
         /**
@@ -324,8 +339,16 @@
             }
             this.state.addLog(`${teamName} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
             if (!this.features.individualSurvival) {
-                this.engine.recordTeamEliminationPlacement(teamName);
-                this.engine.tryFinalize();
+                const features = this.features;
+
+                if (features.pvp && features.teamElimination) {
+                    // PvP placements are finalised at Game OVER so tied surviving teams
+                    // can share placement correctly.
+                    this.engine.tryFinalize();
+                } else {
+                    this.engine.recordTeamEliminationPlacement(teamName);
+                    this.engine.tryFinalize();
+                }
             }
             return true;
         }
